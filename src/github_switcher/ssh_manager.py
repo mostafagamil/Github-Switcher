@@ -24,6 +24,7 @@ Example:
     success = manager.test_connection("work")
 """
 
+import platform
 import subprocess
 from pathlib import Path
 
@@ -238,8 +239,9 @@ class SSHManager:
         existing_pub.rename(profile_pub)
 
         # Set proper permissions
-        profile_key.chmod(0o600)
-        profile_pub.chmod(0o644)
+        if platform.system() != 'Windows':
+            profile_key.chmod(0o600)
+            profile_pub.chmod(0o644)
 
         # Update any SSH config entries that referenced the old key path
         self._update_ssh_config_key_paths(str(existing_key), str(profile_key))
@@ -309,12 +311,14 @@ class SSHManager:
             # Write private key
             with open(private_key_path, "wb") as f:
                 f.write(private_pem)
-            private_key_path.chmod(0o600)
+            if platform.system() != 'Windows':
+                private_key_path.chmod(0o600)
 
             # Write public key
             with open(public_key_path, "w", encoding="utf-8") as f:
                 f.write(public_key_content + "\n")
-            public_key_path.chmod(0o644)
+            if platform.system() != 'Windows':
+                public_key_path.chmod(0o644)
 
             return str(private_key_path), public_key_content
 
@@ -403,7 +407,8 @@ Host github-{profile_name}
             f.write(config_entry)
 
         # Set proper permissions
-        self.ssh_config_file.chmod(0o600)
+        if platform.system() != 'Windows':
+            self.ssh_config_file.chmod(0o600)
 
     def _update_ssh_config_key_paths(self, old_key_path: str, new_key_path: str) -> None:
         """Update SSH config entries that reference the old key path."""
@@ -437,7 +442,8 @@ Host github.com
         if not self.ssh_config_file.exists():
             with open(self.ssh_config_file, "w", encoding="utf-8") as f:
                 f.write(github_entry)
-            self.ssh_config_file.chmod(0o600)
+            if platform.system() != 'Windows':
+                self.ssh_config_file.chmod(0o600)
             return
 
         # Read existing config
@@ -470,7 +476,8 @@ Host github.com
         with open(self.ssh_config_file, "w", encoding="utf-8") as f:
             f.write(updated_config)
 
-        self.ssh_config_file.chmod(0o600)
+        if platform.system() != 'Windows':
+            self.ssh_config_file.chmod(0o600)
 
     def remove_ssh_config_entry(self, profile_name: str) -> None:
         """Remove SSH config entry for profile."""

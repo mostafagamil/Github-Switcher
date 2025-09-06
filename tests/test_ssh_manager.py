@@ -293,7 +293,8 @@ class TestImportExistingKey:
         assert profile_pub.exists()
         if platform.system() != 'Windows':
             assert oct(profile_key.stat().st_mode)[-3:] == '600'
-        assert oct(profile_pub.stat().st_mode)[-3:] == '644'
+        if platform.system() != 'Windows':
+            assert oct(profile_pub.stat().st_mode)[-3:] == '644'
 
     def test_import_existing_key_not_found(self, ssh_manager):
         """Test import when key files don't exist."""
@@ -342,7 +343,8 @@ class TestGenerateSSHKey:
         assert public_key_path.exists()
         if platform.system() != 'Windows':
             assert oct(private_key_path.stat().st_mode)[-3:] == '600'
-        assert oct(public_key_path.stat().st_mode)[-3:] == '644'
+        if platform.system() != 'Windows':
+            assert oct(public_key_path.stat().st_mode)[-3:] == '644'
 
     def test_generate_ssh_key_already_exists(self, ssh_manager):
         """Test generation when key already exists."""

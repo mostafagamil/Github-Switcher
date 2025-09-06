@@ -106,7 +106,8 @@ def ensure_directory(path: Path, mode: int = 0o755) -> None:
         >>> ensure_directory(Path('/tmp/test'), mode=0o700)
     """
     path.mkdir(parents=True, exist_ok=True)
-    path.chmod(mode)
+    if platform.system() != 'Windows':
+        path.chmod(mode)
 
 
 def safe_remove_file(path: Path) -> bool:
