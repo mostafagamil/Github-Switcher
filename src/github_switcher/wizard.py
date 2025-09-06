@@ -173,7 +173,7 @@ class ProfileWizard:
         welcome_text.append("• SSH key generation (Ed25519)\n", style="cyan")
         welcome_text.append("• Git configuration setup\n", style="cyan")
         welcome_text.append("• Automatic clipboard integration\n\n", style="cyan")
-        welcome_text.append("Let's get started! 🚀", style="bold green")
+        welcome_text.append("Let's get started!", style="bold green")
 
         panel = Panel(welcome_text, border_style="blue", padding=(1, 2))
         self.console.print(panel)

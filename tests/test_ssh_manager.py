@@ -1,5 +1,6 @@
 """Tests for SSH key generation and management functionality."""
 
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -39,7 +40,8 @@ class TestSSHManagerInit:
             mock_home.return_value = temp_ssh_dir.parent
             manager = SSHManager()
             assert manager.ssh_dir.exists()
-            assert oct(manager.ssh_dir.stat().st_mode)[-3:] == '700'
+            if platform.system() != 'Windows':
+                assert oct(manager.ssh_dir.stat().st_mode)[-3:] == '700'
 
     @patch('shutil.copy2')
     def test_init_creates_backup(self, mock_copy, temp_ssh_dir):
@@ -289,7 +291,8 @@ class TestImportExistingKey:
         assert result[1] == "ssh-ed25519 ABC... test@example.com"
         assert profile_key.exists()
         assert profile_pub.exists()
-        assert oct(profile_key.stat().st_mode)[-3:] == '600'
+        if platform.system() != 'Windows':
+            assert oct(profile_key.stat().st_mode)[-3:] == '600'
         assert oct(profile_pub.stat().st_mode)[-3:] == '644'
 
     def test_import_existing_key_not_found(self, ssh_manager):
@@ -337,7 +340,8 @@ class TestGenerateSSHKey:
         assert "work@example.com" in result[1]
         assert private_key_path.exists()
         assert public_key_path.exists()
-        assert oct(private_key_path.stat().st_mode)[-3:] == '600'
+        if platform.system() != 'Windows':
+            assert oct(private_key_path.stat().st_mode)[-3:] == '600'
         assert oct(public_key_path.stat().st_mode)[-3:] == '644'
 
     def test_generate_ssh_key_already_exists(self, ssh_manager):
@@ -393,10 +397,15 @@ class TestGetPublicKey:
         """Test public key retrieval with read error."""
         public_key_path = ssh_manager.ssh_dir / "id_ed25519_work.pub"
         public_key_path.write_text("test")
-        public_key_path.chmod(0o000)  # Make unreadable
 
-        result = ssh_manager.get_public_key("work")
-        assert result is None
+        if platform.system() != 'Windows':
+            public_key_path.chmod(0o000)  # Make unreadable
+            result = ssh_manager.get_public_key("work")
+            assert result is None
+        else:
+            # On Windows, test the normal case since chmod doesn't work the same
+            result = ssh_manager.get_public_key("work")
+            assert result == "test"
 
         public_key_path.chmod(0o644)  # Restore for cleanup
 
@@ -652,7 +661,8 @@ class TestSSHConfigFile:
         ssh_manager._add_ssh_config_entry("work", "/path/to/key")
 
         config_stat = ssh_manager.ssh_config_file.stat()
-        assert oct(config_stat.st_mode)[-3:] == '600'
+        if platform.system() != 'Windows':
+            assert oct(config_stat.st_mode)[-3:] == '600'
 
     def test_ssh_config_entry_format(self, ssh_manager):
         """Test SSH config entry has correct format."""

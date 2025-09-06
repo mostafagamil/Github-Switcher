@@ -33,7 +33,7 @@ from .wizard import ProfileWizard
 
 app = typer.Typer(
     name="ghsw",
-    help="🚀 Professional CLI tool for managing multiple GitHub identities with smart interactive commands and case-insensitive matching.",
+    help="Professional CLI tool for managing multiple GitHub identities with smart interactive commands and case-insensitive matching.",
     add_completion=False,
 )
 console = Console()
@@ -571,7 +571,7 @@ def detect_existing_setup() -> None:
                 console.print(f"  {rec}")
 
         console.print()
-        console.print("🚀 [dim]Run '[bold]ghsw create[/bold]' to set up a new profile[/dim]")
+        console.print("[dim]Run '[bold]ghsw create[/bold]' to set up a new profile[/dim]")
         if existing_setup["all_keys"]:
             console.print("   [dim]→ You'll be able to import any of the keys above[/dim]")
 

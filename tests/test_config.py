@@ -1,5 +1,6 @@
 """Tests for configuration management."""
 
+import platform
 import shutil
 import tempfile
 from pathlib import Path
@@ -223,6 +224,9 @@ class TestConfig:
 
     def test_save_profiles_os_error(self, temp_config_dir):
         """Test saving profiles with OS error."""
+        if platform.system() == 'Windows':
+            pytest.skip("Permission tests don't work reliably on Windows")
+
         with patch('pathlib.Path.home') as mock_home:
             mock_home.return_value = temp_config_dir.parent
             config = Config()

@@ -1,6 +1,7 @@
 """Tests for utility functions and helpers."""
 
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -93,7 +94,11 @@ class TestExpandPath:
         result = expand_path("/tmp/test")
         assert result.is_absolute()
         # On macOS, /tmp may resolve to /private/tmp
-        assert str(result).endswith("/tmp/test")
+        # On Windows, paths are different
+        if platform.system() == 'Windows':
+            assert str(result).endswith("\\tmp\\test")
+        else:
+            assert str(result).endswith("/tmp/test")
 
     def test_expand_path_with_tilde(self):
         """Test expanding path with tilde."""
@@ -124,7 +129,8 @@ class TestEnsureDirectory:
 
         assert new_dir.exists()
         assert new_dir.is_dir()
-        assert oct(new_dir.stat().st_mode)[-3:] == '755'
+        if platform.system() != 'Windows':
+            assert oct(new_dir.stat().st_mode)[-3:] == '755'
 
     def test_ensure_directory_existing(self, temp_dir):
         """Test ensuring existing directory."""
@@ -134,7 +140,8 @@ class TestEnsureDirectory:
         ensure_directory(existing_dir, mode=0o700)
 
         assert existing_dir.exists()
-        assert oct(existing_dir.stat().st_mode)[-3:] == '700'
+        if platform.system() != 'Windows':
+            assert oct(existing_dir.stat().st_mode)[-3:] == '700'
 
     def test_ensure_directory_nested(self, temp_dir):
         """Test creating nested directories."""
