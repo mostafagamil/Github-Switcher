@@ -1,6 +1,6 @@
 # GitHub Switcher
 
-[![Tests](https://github.com/mostafagamil/Github-Switcher/workflows/Tests/badge.svg)](https://github.com/mostafagamil/Github-Switcher/actions)
+[![Tests](https://github.com/mostafagamil/Github-Switcher/workflows/CI/badge.svg)](https://github.com/mostafagamil/Github-Switcher/actions)
 [![PyPI](https://img.shields.io/pypi/v/github-switcher.svg)](https://pypi.org/project/github-switcher/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
