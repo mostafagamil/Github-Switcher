@@ -19,10 +19,37 @@
 ## 📦 Installation
 
 ### Recommended: UV (Modern & Fast)
+
+[UV](https://github.com/astral-sh/uv) is a modern, fast Python package and project manager written in Rust. It's 10-100x faster than pip and provides better dependency resolution.
+
+First, install UV if you don't have it:
+
+**macOS**:
+```bash
+brew install uv
+```
+
+**Linux/WSL**:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows** (PowerShell):
+```bash
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**Alternative** (any platform):
+```bash
+pip install uv
+```
+
+Then install GitHub Switcher:
 ```bash
 uv tool install github-switcher
 ```
-*UV provides faster installation, better dependency resolution, and isolated tool management*
+
+*UV provides faster installation (10x+ faster), better dependency resolution, and isolated tool management*
 
 ### Standard: pip
 ```bash
