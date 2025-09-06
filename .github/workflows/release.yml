@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  release:
+    types: [published]
+
+env:
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+      fail-fast: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install UV
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        uv sync --dev --locked
+
+    - name: Run tests with coverage
+      run: |
+        uv run python -m pytest tests/ --cov=github_switcher --cov-report=term-missing -v
+
+  build-and-publish:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install UV
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        uv sync --locked
+
+    - name: Build package
+      run: |
+        uv build
+
+    - name: Verify build
+      run: |
+        ls -la dist/
+        uv run python -m twine check dist/*
+
+    - name: Publish to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        uv run python -m twine upload dist/*
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-dist
+        path: dist/
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: release-dist
+        path: dist/
+
+    - name: Extract version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/*.whl
+          dist/*.tar.gz
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+        name: "GitHub Switcher v${{ steps.get_version.outputs.version }}"
+        body: |
+          ## Installation
+
+          ### Recommended: UV (Fast & Modern)
+          ```bash
+          uv tool install github-switcher
+          ```
+
+          ### Standard: pip
+          ```bash
+          pip install github-switcher
+          ```
+
+          ### Verify Installation
+          ```bash
+          ghsw --version
+          ```
+
+          ## What's Changed
+          See [CHANGELOG.md](https://github.com/mostafagamil/Github-Switcher/blob/main/CHANGELOG.md) for detailed changes.
+
+          ## Full Changelog
+          **Full Changelog**: https://github.com/mostafagamil/Github-Switcher/compare/...v${{ steps.get_version.outputs.version }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,120 @@
+[project]
+name = "github-switcher"
+version = "0.1.0"
+description = "Professional CLI tool for managing multiple GitHub identities with wizard-based profile creation and SSH key management"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Mostafa Gamil", email = "mostafa_gamil@yahoo.com"}
+]
+license = {text = "MIT"}
+keywords = ["github", "ssh", "git", "identity", "cli", "profile", "switcher"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Tools",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "toml>=0.10.2", 
+    "paramiko>=3.0.0",
+    "pyperclip>=1.8.0",
+    "cryptography>=41.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/mostafagamil/Github-Switcher"
+Repository = "https://github.com/mostafagamil/Github-Switcher"
+Issues = "https://github.com/mostafagamil/Github-Switcher/issues"
+Changelog = "https://github.com/mostafagamil/Github-Switcher/blob/main/CHANGELOG.md"
+
+[project.scripts]
+ghsw = "github_switcher.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings  
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "B904",  # Within an `except` clause, raise exceptions with `raise ... from err`
+    "E501",  # Line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_untyped_decorators = false
+no_implicit_optional = false
+warn_redundant_casts = false
+warn_unused_ignores = false
+warn_no_return = false
+warn_unreachable = false
+strict_equality = false
+ignore_missing_imports = true
+show_error_codes = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]  
+python_functions = ["test_*"]
+addopts = [
+    "--cov=github_switcher",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=95"
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17.1",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12.11",
+    "types-toml>=0.10.8.20240310",
+    "types-PyYAML>=6.0.0",
+    "twine>=5.0.0",
+    "bandit>=1.7.0",
+    "safety>=3.0.0",
+]
