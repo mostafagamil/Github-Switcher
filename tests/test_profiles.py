@@ -237,3 +237,308 @@ class TestProfileManager:
         with pytest.raises(ValueError, match="Profile 'nonexistent' not found"):
             profile_manager.delete_profile("nonexistent", mock_ssh)
 
+
+    def test_create_profile_with_full_metadata(self, profile_manager):
+        """Test creating profile with complete SSH metadata."""
+        profile_manager.create_profile(
+            name="work",
+            fullname="Work User",
+            email="work@example.com",
+            ssh_key_path="/path/to/key",
+            ssh_public_key="ssh-ed25519 ABC123",
+            ssh_key_fingerprint="SHA256:abcd1234",
+            ssh_key_passphrase_protected=True,
+            ssh_key_source="imported",
+            ssh_key_type="ed25519"
+        )
+
+        profile = profile_manager.get_profile("work")
+        assert profile is not None
+        assert profile["ssh_key_fingerprint"] == "SHA256:abcd1234"
+        assert profile["ssh_key_passphrase_protected"] is True
+        assert profile["ssh_key_source"] == "imported"
+        assert profile["ssh_key_type"] == "ed25519"
+
+    def test_create_profile_with_default_metadata(self, profile_manager):
+        """Test creating profile with default SSH metadata."""
+        profile_manager.create_profile(
+            name="personal",
+            fullname="Personal User",
+            email="personal@example.com",
+            ssh_key_path="/path/to/personal",
+            ssh_public_key="ssh-ed25519 DEF456"
+        )
+
+        profile = profile_manager.get_profile("personal")
+        assert profile is not None
+        assert profile.get("ssh_key_fingerprint") is None
+        assert profile["ssh_key_passphrase_protected"] is False
+        assert profile["ssh_key_source"] == "generated"
+        assert profile["ssh_key_type"] == "ed25519"
+
+    def test_update_profile_metadata(self, profile_manager):
+        """Test updating profile with SSH metadata."""
+        # Create initial profile
+        profile_manager.create_profile(
+            "test", "Test User", "test@example.com", "/path/key", "ssh-ed25519 TEST"
+        )
+
+        # Update with metadata
+        profile_manager.update_profile(
+            "test",
+            ssh_key_fingerprint="SHA256:newfingerprint",
+            ssh_key_passphrase_protected=True,
+            ssh_key_source="imported"
+        )
+
+        profile = profile_manager.get_profile("test")
+        assert profile["ssh_key_fingerprint"] == "SHA256:newfingerprint"
+        assert profile["ssh_key_passphrase_protected"] is True
+        assert profile["ssh_key_source"] == "imported"
+
+    def test_export_profiles_with_metadata(self, profile_manager):
+        """Test exporting profiles includes metadata."""
+        profile_manager.create_profile(
+            name="export_test",
+            fullname="Export User",
+            email="export@example.com",
+            ssh_key_path="/path/export",
+            ssh_public_key="ssh-ed25519 EXPORT123",
+            ssh_key_fingerprint="SHA256:export1234",
+            ssh_key_passphrase_protected=True,
+            ssh_key_source="generated",
+            ssh_key_type="rsa"
+        )
+
+        exported_str = profile_manager.export_profiles()
+        # Parse the TOML string
+        import toml
+        exported = toml.loads(exported_str)
+        profile_data = exported["profiles"]["export_test"]
+
+        assert profile_data["ssh_key_fingerprint"] == "SHA256:export1234"
+        assert profile_data["ssh_key_passphrase_protected"] is True
+        assert profile_data["ssh_key_source"] == "generated"
+        assert profile_data["ssh_key_type"] == "rsa"
+
+    def test_import_profiles_with_metadata(self, profile_manager):
+        """Test importing profiles with metadata."""
+        import_data_str = '''[profiles.imported]
+name = "Imported User"
+email = "imported@example.com"
+ssh_key_public = "ssh-ed25519 IMPORTED123"
+ssh_key_fingerprint = "SHA256:imported1234"
+ssh_key_passphrase_protected = false
+ssh_key_source = "imported"
+ssh_key_type = "ed25519"
+created_at = "2024-01-01T00:00:00"
+'''
+
+        profile_manager.import_profiles(import_data_str)
+
+        profile = profile_manager.get_profile("imported")
+        assert profile is not None
+        assert profile["ssh_key_fingerprint"] == "SHA256:imported1234"
+        assert profile["ssh_key_passphrase_protected"] is False
+        assert profile["ssh_key_source"] == "imported"
+        assert profile["ssh_key_type"] == "ed25519"
+
+    def test_import_legacy_profiles_without_metadata(self, profile_manager):
+        """Test importing old profile format without metadata (backward compatibility)."""
+        legacy_data_str = '''[profiles.legacy]
+name = "Legacy User"
+email = "legacy@example.com"
+ssh_key_public = "ssh-rsa LEGACY123"
+created_at = "2023-01-01T00:00:00"
+# No metadata fields
+'''
+
+        profile_manager.import_profiles(legacy_data_str)
+
+        profile = profile_manager.get_profile("legacy")
+        assert profile is not None
+        # Should have default values
+        assert profile.get("ssh_key_fingerprint") is None
+        assert profile["ssh_key_passphrase_protected"] is False
+        assert profile["ssh_key_source"] == "generated"
+        assert profile["ssh_key_type"] == "ed25519"
+
+    def test_export_profiles_json_format(self, profile_manager):
+        """Test exporting profiles in JSON format."""
+        profile_manager.create_profile(
+            "json_test", "JSON User", "json@example.com", "/path/json", "ssh-ed25519 JSON123"
+        )
+
+        exported_json = profile_manager.export_profiles(format="json")
+
+        # Parse the JSON
+        import json
+        exported = json.loads(exported_json)
+
+        assert "profiles" in exported
+        assert "json_test" in exported["profiles"]
+        profile_data = exported["profiles"]["json_test"]
+        assert profile_data["name"] == "JSON User"
+        assert profile_data["email"] == "json@example.com"
+
+    def test_export_profiles_yaml_format_without_pyyaml(self, profile_manager):
+        """Test exporting profiles in YAML format when PyYAML is not available."""
+        profile_manager.create_profile(
+            "yaml_test", "YAML User", "yaml@example.com", "/path/yaml", "ssh-ed25519 YAML123"
+        )
+
+        # Mock yaml import to raise ImportError
+        import sys
+        original_modules = sys.modules.copy()
+
+        # Remove yaml from modules if it exists
+        if 'yaml' in sys.modules:
+            del sys.modules['yaml']
+
+        # Mock import to always fail for yaml
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == 'yaml':
+                raise ImportError("No module named 'yaml'")
+            return original_import(name, *args, **kwargs)
+
+        builtins.__import__ = mock_import
+
+        try:
+            with pytest.raises(ValueError, match="PyYAML not installed"):
+                profile_manager.export_profiles(format="yaml")
+        finally:
+            # Restore original state
+            builtins.__import__ = original_import
+            sys.modules.update(original_modules)
+
+    def test_import_profiles_json_format(self, profile_manager):
+        """Test importing profiles from JSON format."""
+        json_data = '''
+        {
+            "profiles": {
+                "json_import": {
+                    "name": "JSON Import User",
+                    "email": "json@import.com",
+                    "ssh_key_public": "ssh-ed25519 JSONIMPORT123",
+                    "created_at": "2024-01-01T00:00:00"
+                }
+            }
+        }
+        '''
+
+        profile_manager.import_profiles(json_data, format="json")
+
+        profile = profile_manager.get_profile("json_import")
+        assert profile is not None
+        assert profile["name"] == "JSON Import User"
+        assert profile["email"] == "json@import.com"
+
+    def test_import_profiles_yaml_format_without_pyyaml(self, profile_manager):
+        """Test importing profiles from YAML format when PyYAML is not available."""
+        yaml_data = '''
+        profiles:
+          yaml_import:
+            name: "YAML Import User"
+            email: "yaml@import.com"
+            ssh_key_public: "ssh-ed25519 YAMLIMPORT123"
+            created_at: "2024-01-01T00:00:00"
+        '''
+
+        # Mock yaml import to raise ImportError
+        import sys
+        original_modules = sys.modules.copy()
+
+        # Remove yaml from modules if it exists
+        if 'yaml' in sys.modules:
+            del sys.modules['yaml']
+
+        # Mock import to always fail for yaml
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == 'yaml':
+                raise ImportError("No module named 'yaml'")
+            return original_import(name, *args, **kwargs)
+
+        builtins.__import__ = mock_import
+
+        try:
+            with pytest.raises(ValueError, match="PyYAML not installed"):
+                profile_manager.import_profiles(yaml_data, format="yaml")
+        finally:
+            # Restore original state
+            builtins.__import__ = original_import
+            sys.modules.update(original_modules)
+
+    def test_export_profiles_yaml_format_with_pyyaml(self, profile_manager):
+        """Test exporting profiles in YAML format when PyYAML is available."""
+        from unittest.mock import Mock
+
+        profile_manager.create_profile(
+            "yaml_test", "YAML User", "yaml@example.com", "/path/yaml", "ssh-ed25519 YAML123"
+        )
+
+        # Mock yaml module to be available
+        mock_yaml = Mock()
+        mock_yaml.dump.return_value = "mocked_yaml_output"
+
+        import sys
+        original_modules = sys.modules.copy()
+        sys.modules['yaml'] = mock_yaml
+
+        try:
+            result = profile_manager.export_profiles(format="yaml")
+            assert result == "mocked_yaml_output"
+            mock_yaml.dump.assert_called_once()
+        finally:
+            # Restore original modules
+            sys.modules.clear()
+            sys.modules.update(original_modules)
+
+    def test_import_profiles_yaml_format_with_pyyaml(self, profile_manager):
+        """Test importing profiles from YAML format when PyYAML is available."""
+        from unittest.mock import Mock
+
+        yaml_data = '''
+        profiles:
+          yaml_import:
+            name: "YAML Import User"
+            email: "yaml@import.com"
+            ssh_key_public: "ssh-ed25519 YAMLIMPORT123"
+            created_at: "2024-01-01T00:00:00"
+        '''
+
+        # Mock yaml module to be available
+        mock_yaml = Mock()
+        mock_yaml.safe_load.return_value = {
+            "profiles": {
+                "yaml_import": {
+                    "name": "YAML Import User",
+                    "email": "yaml@import.com",
+                    "ssh_key_public": "ssh-ed25519 YAMLIMPORT123",
+                    "created_at": "2024-01-01T00:00:00"
+                }
+            }
+        }
+
+        import sys
+        original_modules = sys.modules.copy()
+        sys.modules['yaml'] = mock_yaml
+
+        try:
+            profile_manager.import_profiles(yaml_data, format="yaml")
+
+            profile = profile_manager.get_profile("yaml_import")
+            assert profile is not None
+            assert profile["name"] == "YAML Import User"
+            assert profile["email"] == "yaml@import.com"
+            mock_yaml.safe_load.assert_called_once_with(yaml_data)
+        finally:
+            # Restore original modules
+            sys.modules.clear()
+            sys.modules.update(original_modules)
+

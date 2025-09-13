@@ -1,6 +1,6 @@
 [project]
 name = "github-switcher"
-version = "0.1.0"
+version = "0.2.0"
 description = "Professional CLI tool for managing multiple GitHub identities with wizard-based profile creation and SSH key management"
 readme = "README.md"
 requires-python = ">=3.10"

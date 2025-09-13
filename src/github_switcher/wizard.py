@@ -29,7 +29,9 @@ Example:
     wizard.create_profile_interactive()
 """
 
+import getpass
 import re
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -260,7 +262,7 @@ class ProfileWizard:
         try:
             # Check for existing GitHub setup
             existing_setup = self.ssh_manager.detect_existing_github_setup()
-            ssh_key_path, ssh_public_key = self._handle_ssh_key_creation(
+            ssh_key_path, ssh_public_key, ssh_metadata = self._handle_ssh_key_creation_enhanced(
                 profile_name, email, existing_setup
             )
 
@@ -268,10 +270,18 @@ class ProfileWizard:
             with self.console.status("📋 Copying SSH key to clipboard..."):
                 self.ssh_manager.copy_public_key_to_clipboard(profile_name)
 
-            # Create profile
+            # Create profile with enhanced metadata
             with self.console.status("💾 Saving profile..."):
                 self.profile_manager.create_profile(
-                    profile_name, fullname, email, ssh_key_path, ssh_public_key
+                    name=profile_name,
+                    fullname=fullname,
+                    email=email,
+                    ssh_key_path=ssh_key_path,
+                    ssh_public_key=ssh_public_key,
+                    ssh_key_fingerprint=ssh_metadata.get("fingerprint"),
+                    ssh_key_passphrase_protected=ssh_metadata.get("passphrase_protected", False),
+                    ssh_key_source=ssh_metadata.get("source", "generated"),
+                    ssh_key_type=ssh_metadata.get("key_type", "ed25519"),
                 )
 
             # Show success message and next steps
@@ -284,32 +294,84 @@ class ProfileWizard:
     def _handle_ssh_key_creation(
         self, profile_name: str, email: str, existing_setup: dict
     ) -> tuple[str, str]:
-        """Handle SSH key creation, considering existing setup."""
-        # If user has existing GitHub setup, offer to import or create new
-        if existing_setup.get("has_github_host") or existing_setup.get("github_keys"):
+        """Handle SSH key creation with streamlined UX and deduplication."""
+        # Check for importable keys (using new deduplication logic)
+        profiles = self.profile_manager.list_profiles()
+        importable_keys = []
+
+        for key in existing_setup.get("all_keys", []):
+            key_path = key.get("path")
+            if key_path:
+                is_used, used_by = self.ssh_manager.is_key_already_used(key_path, profiles)
+                if not is_used and key.get("name", "") not in self.session_imported_keys:
+                    importable_keys.append(key)
+
+        # Offer import option if keys are available
+        if importable_keys:
             self._show_existing_setup_detected(existing_setup)
 
             choice = Prompt.ask(
-                "🤔 [bold]How would you like to handle SSH keys?[/bold]",
-                choices=["new", "import", "skip"],
-                default="new",
+                "🔑 [bold]SSH Key Options[/bold]",
+                choices=["1", "2"],
+                default="2",
                 console=self.console,
             )
 
-            if choice == "import":
-                return self._import_existing_ssh_key(
-                    profile_name, email, existing_setup
+            if choice == "1":
+                return self._import_existing_ssh_key_enhanced(
+                    profile_name, email, importable_keys
                 )
-            elif choice == "skip":
-                # Create placeholder - user will set up SSH manually
-                placeholder_key = f"~/.ssh/id_ed25519_{profile_name}"
-                placeholder_pub = "# SSH key will be set up manually"
-                return placeholder_key, placeholder_pub
-            # else: create new key (default behavior)
+            # else: generate new key
 
-        # Generate new SSH key
-        with self.console.status("🔐 Generating SSH key..."):
-            return self.ssh_manager.generate_ssh_key(profile_name, email)
+        # Generate new SSH key with passphrase option (streamlined flow)
+        ssh_key_path, ssh_public_key, _ = self._generate_new_ssh_key_with_options(profile_name, email)
+        return ssh_key_path, ssh_public_key
+
+    def _handle_ssh_key_creation_enhanced(
+        self, profile_name: str, email: str, existing_setup: dict
+    ) -> tuple[str, str, dict]:
+        """Enhanced SSH key creation with metadata collection."""
+        # Get the SSH key and basic info
+        ssh_key_path, ssh_public_key = self._handle_ssh_key_creation(
+            profile_name, email, existing_setup
+        )
+
+        # Collect metadata about the created/imported key
+        metadata = {
+            "fingerprint": None,
+            "passphrase_protected": False,
+            "source": "generated",
+            "key_type": "ed25519"
+        }
+
+        try:
+            # Get fingerprint
+            metadata["fingerprint"] = self.ssh_manager.get_key_fingerprint(ssh_key_path)
+
+            # Detect if key is passphrase protected
+            metadata["passphrase_protected"] = self.ssh_manager.detect_passphrase_protected_key(ssh_key_path)
+
+            # Determine key type from public key
+            if ssh_public_key.startswith("ssh-ed25519"):
+                metadata["key_type"] = "ed25519"
+            elif ssh_public_key.startswith("ssh-rsa"):
+                metadata["key_type"] = "rsa"
+            elif ssh_public_key.startswith("ecdsa-"):
+                metadata["key_type"] = "ecdsa"
+
+            # Determine if this was imported or generated
+            # Check if this key was just imported in this session
+            key_name = Path(ssh_key_path).name.replace(f"_{profile_name}", "")
+            if key_name in self.session_imported_keys:
+                metadata["source"] = "imported"
+            else:
+                metadata["source"] = "generated"
+
+        except Exception as e:
+            # If metadata collection fails, continue with defaults
+            self.console.print(f"⚠️ [yellow]Warning: Could not collect SSH key metadata: {e}[/yellow]")
+
+        return ssh_key_path, ssh_public_key, metadata
 
     def _show_existing_setup_detected(self, existing_setup: dict) -> None:
         """Show information about existing GitHub SSH setup."""
@@ -601,20 +663,25 @@ class ProfileWizard:
                 # Track this key as imported in this session
                 self.session_imported_keys.add(selected_key_info["name"])
                 self.console.print(f"✅ [green]Imported SSH key: {selected_key_info['name']}[/green]")
+                # Detect if imported key is passphrase protected
+                ssh_passphrase_protected = self.ssh_manager.detect_passphrase_protected_key(ssh_key_path)
             else:
-                # Generate new key
-                with self.console.status("🔐 Generating SSH key..."):
-                    ssh_key_path, ssh_public_key = self.ssh_manager.generate_ssh_key(profile_name, email)
-                self.console.print("✅ [green]Generated new Ed25519 SSH key[/green]")
+                # Generate new key with options
+                ssh_key_path, ssh_public_key, ssh_passphrase_protected = self._generate_new_ssh_key_with_options(profile_name, email)
 
             # Copy public key to clipboard
             with self.console.status("📋 Copying SSH key to clipboard..."):
                 self.ssh_manager.copy_public_key_to_clipboard(profile_name)
 
-            # Create profile
+            # Create profile with SSH security metadata
             with self.console.status("💾 Saving profile..."):
                 self.profile_manager.create_profile(
-                    profile_name, fullname, email, ssh_key_path, ssh_public_key
+                    name=profile_name,
+                    fullname=fullname,
+                    email=email,
+                    ssh_key_path=ssh_key_path,
+                    ssh_public_key=ssh_public_key,
+                    ssh_key_passphrase_protected=ssh_passphrase_protected
                 )
 
             # Show success message
@@ -651,3 +718,138 @@ class ProfileWizard:
         except Exception as e:
             self.console.print(f"❌ [red]Fallback creation also failed: {e}[/red]")
             raise typer.Exit(1)
+
+    def _generate_new_ssh_key_with_options(self, profile_name: str, email: str) -> tuple[str, str, bool]:
+        """Generate new SSH key with optional passphrase protection (streamlined UX)."""
+        self.console.print("\n🔐 [bold]SSH Key Generation[/bold]")
+
+        # Direct question about passphrase protection
+        protect_with_passphrase = Confirm.ask(
+            "🔐 Protect SSH key with passphrase?",
+            default=False,
+            console=self.console
+        )
+
+        try:
+            if protect_with_passphrase:
+                self.console.print("ℹ️ [yellow]Enter passphrase to encrypt your SSH key (for enhanced security)[/yellow]")
+
+                # Get passphrase securely (never stored)
+                passphrase: str = ""
+                passphrase_confirm: str = ""
+                while True:
+                    passphrase = getpass.getpass("🔐 Enter passphrase: ").strip()
+                    if len(passphrase) < 8:
+                        self.console.print("❌ [red]Passphrase must be at least 8 characters[/red]")
+                        continue
+
+                    passphrase_confirm = getpass.getpass("🔐 Confirm passphrase: ").strip()
+                    if passphrase != passphrase_confirm:
+                        self.console.print("❌ [red]Passphrases don't match[/red]")
+                        continue
+
+                    break
+
+                # Generate with passphrase
+                with self.console.status("🔐 Generating passphrase-protected SSH key..."):
+                    ssh_key_path, ssh_public_key = self.ssh_manager.generate_ssh_key_with_passphrase(
+                        profile_name, email, passphrase
+                    )
+
+                    # Add key to ssh-agent for immediate use
+                    if not self.ssh_manager.is_key_in_ssh_agent(ssh_key_path):
+                        self.console.print("🔑 [yellow]Adding key to ssh-agent for this session...[/yellow]")
+                        self.ssh_manager.add_key_to_ssh_agent(ssh_key_path)
+
+                # Clear passphrase from memory
+                del passphrase
+                del passphrase_confirm
+
+            else:
+                # Generate without passphrase (standard flow)
+                with self.console.status("🔐 Generating SSH key..."):
+                    ssh_key_path, ssh_public_key = self.ssh_manager.generate_ssh_key(profile_name, email)
+
+            return ssh_key_path, ssh_public_key, protect_with_passphrase
+
+        except Exception as e:
+            self.console.print(f"❌ [red]Failed to generate SSH key: {e}[/red]")
+            raise
+
+    def _import_existing_ssh_key_enhanced(
+        self, profile_name: str, email: str, importable_keys: list[dict]
+    ) -> tuple[str, str]:
+        """Import existing SSH key using enhanced deduplication logic."""
+        if not importable_keys:
+            self.console.print("ℹ️ [yellow]No importable keys available. Generating new key...[/yellow]")
+            ssh_key_path, ssh_public_key, _ = self._generate_new_ssh_key_with_options(profile_name, email)
+            return ssh_key_path, ssh_public_key
+
+        self.console.print("\n📋 [bold]Select SSH key to import:[/bold]")
+        self.console.print("ℹ️ [dim]Keys already used by other profiles are filtered out[/dim]\n")
+
+        choices = []
+        for i, key in enumerate(importable_keys[:10]):  # Show max 10
+            choices.append(str(i + 1))
+            key_name = key.get("name", "Unknown")
+            key_type = key.get("type", "unknown")
+
+            # Show additional info
+            info_parts = [f"[bold]{key_name}[/bold]", f"({key_type})"]
+
+            # Show if key is passphrase protected
+            key_path = key.get("path")
+            if key_path and self.ssh_manager.detect_passphrase_protected_key(key_path):
+                info_parts.append("[yellow](encrypted)[/yellow]")
+
+            # Show key size if available
+            if key.get("size"):
+                info_parts.append(f"{key.get('size')} bits")
+
+            self.console.print(f"  {i + 1}. {' '.join(info_parts)}")
+
+        choices.append("new")
+        self.console.print(f"  {len(choices)}. [green]Generate new key instead[/green]")
+
+        choice = Prompt.ask(
+            "\n🔑 [bold]Select SSH key[/bold]",
+            choices=choices,
+            console=self.console
+        )
+
+        if choice == "new":
+            ssh_key_path, ssh_public_key, _ = self._generate_new_ssh_key_with_options(profile_name, email)
+            return ssh_key_path, ssh_public_key
+
+        try:
+            key_index = int(choice) - 1
+            selected_key = importable_keys[key_index]
+            selected_key_path = selected_key.get("path")
+
+            if not selected_key_path:
+                raise ValueError("Invalid key path")
+
+            self.console.print(f"📥 [green]Importing key: {selected_key.get('name', 'Unknown')}[/green]")
+
+            # Track this key as imported in this session
+            self.session_imported_keys.add(selected_key.get("name", ""))
+
+            # Import (copy) the key using non-destructive approach
+            with self.console.status("📥 Copying SSH key..."):
+                ssh_key_path, ssh_public_key = self.ssh_manager.import_existing_key(
+                    profile_name, selected_key_path, email
+                )
+
+            # Check if imported key is passphrase protected and needs ssh-agent setup
+            if self.ssh_manager.detect_passphrase_protected_key(ssh_key_path):
+                if not self.ssh_manager.is_key_in_ssh_agent(ssh_key_path):
+                    self.console.print("ℹ️ [yellow]This key is passphrase-protected.[/yellow]")
+                    self.console.print(f"💡 [blue]You may want to add it to ssh-agent: ssh-add ~/.ssh/{Path(ssh_key_path).name}[/blue]")
+
+            return ssh_key_path, ssh_public_key
+
+        except (ValueError, IndexError) as e:
+            self.console.print(f"❌ [red]Invalid selection: {e}[/red]")
+            self.console.print("💡 [yellow]Generating new key instead...[/yellow]")
+            ssh_key_path, ssh_public_key, _ = self._generate_new_ssh_key_with_options(profile_name, email)
+            return ssh_key_path, ssh_public_key

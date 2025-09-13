@@ -1,6 +1,6 @@
 # GitHub Switcher
 
-[![Tests](https://github.com/mostafagamil/Github-Switcher/workflows/CI/badge.svg)](https://github.com/mostafagamil/Github-Switcher/actions)
+[![CI](https://github.com/mostafagamil/Github-Switcher/workflows/CI/badge.svg)](https://github.com/mostafagamil/Github-Switcher/actions)
 [![PyPI](https://img.shields.io/pypi/v/github-switcher.svg)](https://pypi.org/project/github-switcher/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -9,12 +9,13 @@
 
 ## ✨ Key Features
 
-- 🔐 **Automated SSH Key Management** - Generate, import, and manage SSH keys seamlessly
+- 🔐 **Advanced SSH Management** - Generate, import, fingerprint, and manage SSH keys with passphrase support
 - ⚡ **Seamless Profile Switching** - Switch Git identities in seconds with intelligent matching
-- 🎯 **Interactive Commands** - Smart wizards with case-insensitive profile matching
-- 🔍 **SSH Detection** - Automatically detect and integrate existing GitHub SSH setup
-- 🌐 **Cross-Platform** - Full support for macOS, Linux, and Windows
-- 🏢 **Enterprise-Ready** - Secure, reliable, comprehensively tested
+- 🎯 **Interactive Commands** - Smart wizards with case-insensitive profile matching and rich feedback
+- 🔍 **Intelligent SSH Detection** - Auto-detect existing setup with deduplication and ssh-agent integration  
+- 🛡️ **Enterprise Security** - Passphrase-protected keys, ssh-agent integration, comprehensive connection testing
+- 🌐 **Cross-Platform** - Full support for macOS, Linux, and Windows with optimal performance
+- 🏢 **Production-Ready** - 260+ tests, 80%+ coverage, type-safe, professionally maintained
 
 ## 📦 Installation
 
@@ -113,54 +114,63 @@ ghsw test            # Test GitHub connection
 ghsw regenerate-key  # Generate new SSH key
 ```
 
-## 🔍 SSH Key Intelligence
+## 🔍 Advanced SSH Intelligence
 
-GitHub Switcher automatically detects your existing SSH setup:
+GitHub Switcher provides enterprise-grade SSH key management with comprehensive analysis:
 
 ```bash
 ghsw detect
-# 🔍 Detecting existing GitHub setup...
-# ✅ GitHub SSH connection is working
-# 🔑 Found 2 SSH key(s):
-#   ✅ id_ed25519_work (john@company.com) → used by 'work' profile
-#   ✅ id_ed25519 (john@gmail.com)
-# ⚙️ SSH config has 3 GitHub entries
+# 🔍 Analyzing SSH environment...
+# 📊 SSH Key Analysis:
+#   🔑 Total keys found: 4
+#   ✅ Ed25519 keys: 2 (recommended)
+#   🔐 Passphrase-protected: 1
+#   🔓 Unencrypted: 3
+# 🏷️ Profile Associations:
+#   ✅ work → id_ed25519_work (SHA256:abc123...)
+#   ✅ personal → id_ed25519_personal (SHA256:def456...)
+# 🔌 SSH Agent Status:
+#   ✅ ssh-agent running
+#   🔑 2 keys loaded in agent
+# 🌐 GitHub Connectivity: ✅ All connections optimal
 ```
 
-**Smart SSH Strategy:**
-- **Import Existing Keys** - Reuse and rename your SSH keys (prevents duplicates)
-- **Generate New Keys** - Create fresh Ed25519 keys for clean separation
-- **Duplicate Prevention** - Never shows already-imported keys
-- **Profile Association** - Track which profile uses which SSH key
+**Enterprise SSH Features:**
+- **Key Fingerprinting** - SHA256 fingerprints for unique identification and deduplication
+- **Passphrase Protection** - Generate and detect encrypted SSH keys for enhanced security
+- **SSH Agent Integration** - Intelligent detection and management of ssh-agent loaded keys
+- **Advanced Connection Testing** - Comprehensive diagnostics with specific error guidance
+- **Non-Destructive Operations** - Copy (don't move) existing keys, preserve original setup
+- **Profile Metadata Tracking** - Enhanced profile storage with SSH key attributes and usage history
 
 ## 📋 Command Reference
 
 | Command | Description |
 |---------|-------------|
 | `ghsw create [options]` | Create new profile with interactive wizard |
-| `ghsw list` | Show all configured profiles with status |
+| `ghsw list` | Show all profiles with SSH security status and activity |
 | `ghsw switch [profile]` | Switch to profile (interactive if no argument) |
 | `ghsw current` | Display currently active profile |
 | `ghsw delete [profile]` | Remove profile and clean up SSH keys |
 | `ghsw copy-key [profile]` | Copy SSH public key to clipboard |
 | `ghsw test [profile]` | Test SSH connection to GitHub |
-| `ghsw regenerate-key [profile]` | Generate new SSH key for profile |
-| `ghsw detect` | Analyze existing GitHub SSH configuration |
+| `ghsw regenerate-key [profile]` | Generate new SSH key with optional passphrase protection |
+| `ghsw detect` | Comprehensive SSH environment analysis with security insights |
 
 ## 🏢 Enterprise Features
 
-- **Security Best Practices** - Ed25519 keys, proper file permissions, secure defaults
-- **Comprehensive Testing** - 237 tests ensuring reliability across all platforms
-- **Error Handling** - Robust error recovery and clear troubleshooting guidance
-- **Cross-Platform** - Automated testing on macOS, Linux, and Windows
-- **Type Safety** - Full type hints and static analysis validation
-- **Professional Documentation** - Complete guides for installation, usage, and troubleshooting
+- **Advanced Security** - Passphrase-protected keys, fingerprinting, ssh-agent integration, secure defaults
+- **Comprehensive Testing** - 260+ tests with 80%+ coverage ensuring reliability across all platforms  
+- **Intelligent Error Handling** - Robust error recovery with specific guidance for SSH issues
+- **Cross-Platform Excellence** - Automated testing on macOS, Linux, and Windows with platform optimizations
+- **Type Safety** - Full type hints and static analysis validation with mypy
+- **Enterprise Documentation** - Complete guides covering advanced SSH features and security practices
 
 ## 📖 Documentation
 
 - [Installation Guide](docs/installation.md) - Comprehensive setup instructions
 - [Usage Guide](docs/usage.md) - Complete feature documentation
-- [SSH Key Management](docs/existing-ssh-keys.md) - Working with existing SSH keys
+- [Advanced SSH Management](docs/existing-ssh-keys.md) - Comprehensive SSH key features including passphrase protection and ssh-agent integration
 - [API Reference](docs/api-reference.md) - Programmatic usage
 - [Contributing](docs/contributing.md) - Development and contribution guidelines
 - [Security Policy](SECURITY.md) - Vulnerability reporting and security practices
@@ -199,11 +209,11 @@ ghsw switch client-b  # Switch to Client B work
 
 ## 📊 Quality Metrics
 
-- **Test Coverage** - Comprehensive test suite with 237 tests
-- **Cross-Platform** - Automated CI testing on macOS, Linux, Windows
-- **Type Safety** - Full mypy validation with strict settings
-- **Code Quality** - Linted with ruff, formatted consistently
-- **Security** - Ed25519 keys, proper permissions, input validation
+- **Test Coverage** - Enterprise-grade test suite with 260+ tests and 80%+ coverage
+- **Cross-Platform** - Automated CI testing on macOS, Linux, Windows with performance optimization
+- **Type Safety** - Full mypy validation with strict settings and comprehensive type coverage
+- **Code Quality** - Linted with ruff, formatted consistently, maintained to professional standards
+- **Security** - Passphrase-protected Ed25519 keys, ssh-agent integration, fingerprinting, proper permissions
 
 ## 🌟 Support the Project
 

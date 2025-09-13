@@ -47,10 +47,15 @@ ghsw create
 ```
 
 The interactive wizard:
-1. Detects existing SSH keys and GitHub setup
-2. Guides you through profile creation
-3. Handles SSH key generation or import automatically
-4. Copies public key to clipboard for GitHub
+1. **Advanced SSH Detection**: Scans for existing keys with fingerprinting and deduplication
+2. **Security Analysis**: Detects passphrase-protected keys and ssh-agent status
+3. **Intelligent Guidance**: Recommends import vs new key generation based on your setup
+4. **Enhanced SSH Security**: Prompts "🔐 Protect SSH key with passphrase?" for enhanced security
+5. **Seamless Integration**: Copies public key to clipboard for GitHub setup
+
+**SSH Key Security Options:**
+- **Standard SSH keys** (🔓 Unprotected): Quick access, no passphrase required
+- **Passphrase-protected SSH keys** (🔐 Protected): Enhanced security with passphrase encryption
 
 **Non-Interactive:**
 ```bash
@@ -80,8 +85,16 @@ ghsw switch client-a  # Exact profile name
 
 ```bash
 ghsw list
-# Shows table with profile names, emails, and status
+# Shows table with profile names, emails, SSH security status, and activity
 ```
+
+The list command displays:
+- **Profile**: Profile name
+- **Name**: Full name for git commits  
+- **Email**: Email address for git commits
+- **SSH Security**: 🔐 Protected (passphrase-protected) or 🔓 Unprotected
+- **Status**: 🟢 Active or ⚪ Inactive
+- **Last Used**: When the profile was last switched to
 
 ### Current Profile
 
@@ -90,7 +103,7 @@ ghsw current
 # Shows currently active profile details
 ```
 
-## SSH Key Management
+## 🔒 Advanced SSH Key Management
 
 ### Copy SSH Key
 
@@ -102,43 +115,123 @@ ghsw copy-key
 ghsw copy-key work
 ```
 
-Copies SSH public key to clipboard for adding to GitHub settings.
+Copies SSH public key to clipboard for adding to GitHub settings. Shows key fingerprint for verification.
 
-### Test SSH Connection
+### Enhanced Connection Testing
 
 ```bash
 # Interactive - choose from list
 ghsw test
 
-# Direct - test specific profile
+# Direct - test specific profile with comprehensive diagnostics
 ghsw test work
 ```
 
-Verifies SSH connection to GitHub works properly.
+**Advanced Connection Testing Features:**
+- **Key Existence Check**: Verifies SSH key files are present
+- **Encryption Detection**: Identifies passphrase-protected keys
+- **SSH Agent Status**: Checks if encrypted keys are loaded in ssh-agent
+- **Configuration Validation**: Ensures SSH config entries are correct
+- **GitHub Connectivity**: Tests actual connection to GitHub servers
+- **Error Guidance**: Provides specific solutions for connection issues
 
-### Regenerate SSH Key
+**Example Output:**
+```bash
+ghsw test work
+🔍 Testing SSH connection for 'work' profile...
+✅ SSH key file exists: ~/.ssh/id_ed25519_work
+🔐 Key is passphrase-protected
+✅ Key is loaded in ssh-agent
+✅ SSH config entry is properly configured
+✅ GitHub connection successful
+🎯 Profile 'work' is ready to use
+```
+
+### SSH Key Regeneration with Security Options
 
 ```bash
-# Interactive - choose from list  
+# Interactive - choose from list with security options
 ghsw regenerate-key
 
 # Direct - regenerate for specific profile
 ghsw regenerate-key work
 ```
 
-Creates new SSH key and copies to clipboard for GitHub update.
+**Enhanced Regeneration Features:**
+- **Passphrase Protection**: Option to encrypt new SSH keys
+- **Secure Key Generation**: Uses Ed25519 algorithm for optimal security
+- **Fingerprint Tracking**: Updates profile metadata with new key fingerprint
+- **Automatic Clipboard**: Copies new public key for GitHub update
+- **Non-Destructive**: Safely removes old keys after successful generation
 
-### Detect Existing Setup
+**Example Workflow:**
+```bash
+ghsw regenerate-key work
+🔐 SSH Key Options
+🔐 Protect new SSH key with passphrase? [y/N]: y
+🔑 Enter passphrase for SSH key: [secure input]
+✅ Generated passphrase-protected SSH key for work
+📋 New SSH public key copied to clipboard
+```
+
+### Comprehensive SSH Environment Analysis
 
 ```bash
 ghsw detect
 ```
 
-Analyzes your current SSH configuration and shows:
-- GitHub connectivity status
-- Available SSH keys
-- Profile associations
-- Configuration recommendations
+**Enhanced Detection Provides:**
+
+📊 **SSH Key Analysis:**
+- Total keys found with type breakdown (Ed25519, RSA, etc.)
+- Passphrase protection status
+- Key fingerprints for identification
+- Security recommendations
+
+🏷️ **Profile Associations:**
+- Which profiles use which SSH keys
+- Available keys for import
+- Duplicate detection
+
+🔌 **SSH Agent Status:**
+- ssh-agent running status
+- Keys currently loaded in agent
+- Encrypted keys requiring passphrase entry
+
+⚙️ **SSH Configuration:**
+- GitHub Switcher managed entries
+- Legacy configuration detection
+- Backup file status
+
+🌐 **Connectivity Testing:**
+- GitHub connection validation
+- Profile-specific connection testing
+- Performance metrics
+
+**Example Output:**
+```bash
+ghsw detect
+🔍 Analyzing SSH environment...
+
+📊 SSH Key Analysis:
+  🔑 Total keys found: 4
+  ✅ Ed25519 keys: 2 (recommended)
+  ⚠️  RSA keys: 2 (legacy)
+  🔐 Passphrase-protected: 1
+  🔓 Unencrypted: 3
+
+🏷️ Profile Associations:
+  ✅ work → id_ed25519_work (SHA256:abc123...)
+  ✅ personal → id_ed25519_personal (SHA256:def456...)
+  🔄 Available for import: id_rsa_old (SHA256:ghi789...)
+
+🔌 SSH Agent Status:
+  ✅ ssh-agent running
+  🔑 2 keys loaded in agent
+  🔐 1 encrypted key needs loading
+
+🌐 GitHub Connectivity: ✅ All connections optimal
+```
 
 ## Profile Management
 

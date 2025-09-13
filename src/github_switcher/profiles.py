@@ -35,8 +35,12 @@ class ProfileManager:
         email: str,
         ssh_key_path: str,
         ssh_public_key: str,
+        ssh_key_fingerprint: str | None = None,
+        ssh_key_passphrase_protected: bool = False,
+        ssh_key_source: str = "generated",
+        ssh_key_type: str = "ed25519",
     ) -> None:
-        """Create a new profile."""
+        """Create a new profile with enhanced SSH metadata."""
         if not self._validate_profile_name(name):
             raise ValueError(
                 "Profile name must contain only letters, numbers, hyphens, and underscores"
@@ -45,7 +49,17 @@ class ProfileManager:
         if not self._validate_email(email):
             raise ValueError("Invalid email format")
 
-        self.config.add_profile(name, fullname, email, ssh_key_path, ssh_public_key)
+        self.config.add_profile(
+            name=name,
+            fullname=fullname,
+            email=email,
+            ssh_key_path=ssh_key_path,
+            ssh_public_key=ssh_public_key,
+            ssh_key_fingerprint=ssh_key_fingerprint,
+            ssh_key_passphrase_protected=ssh_key_passphrase_protected,
+            ssh_key_source=ssh_key_source,
+            ssh_key_type=ssh_key_type,
+        )
 
     def switch_profile(self, name: str, git_manager, ssh_manager) -> bool:
         """Switch to a specific GitHub profile with full configuration update.

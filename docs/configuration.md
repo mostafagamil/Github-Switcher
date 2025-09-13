@@ -32,6 +32,10 @@ name = "John Doe"
 email = "john@company.com"
 ssh_key_path = "~/.ssh/id_ed25519_work"
 ssh_key_public = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... john@company.com"
+ssh_key_fingerprint = "SHA256:abc123def456..."
+ssh_key_passphrase_protected = true
+ssh_key_source = "generated"
+ssh_key_type = "ed25519"
 created_at = "2024-01-15T10:30:00Z"
 last_used = "2024-01-20T14:22:33Z"
 
@@ -40,6 +44,10 @@ name = "John Doe"
 email = "john.personal@gmail.com"
 ssh_key_path = "~/.ssh/id_ed25519_personal"
 ssh_key_public = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... john.personal@gmail.com"
+ssh_key_fingerprint = "SHA256:def456ghi789..."
+ssh_key_passphrase_protected = false
+ssh_key_source = "imported"
+ssh_key_type = "ed25519"
 created_at = "2024-01-10T09:15:00Z"
 last_used = "2024-01-19T20:45:12Z"
 
@@ -48,6 +56,10 @@ name = "John Doe (Contractor)"
 email = "contractor@client-a.com"
 ssh_key_path = "~/.ssh/id_ed25519_client_a"
 ssh_key_public = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... contractor@client-a.com"
+ssh_key_fingerprint = "SHA256:ghi789jkl012..."
+ssh_key_passphrase_protected = true
+ssh_key_source = "generated"
+ssh_key_type = "ed25519"
 created_at = "2024-01-12T16:00:00Z"
 last_used = "2024-01-18T11:30:45Z"
 ```
@@ -78,6 +90,10 @@ name = "Full Name"                    # Git commit name
 email = "email@example.com"           # Git commit email
 ssh_key_path = "~/.ssh/id_ed25519_*"  # Private key path
 ssh_key_public = "ssh-ed25519 ..."    # Public key content
+ssh_key_fingerprint = "SHA256:abc..."  # Key fingerprint for deduplication
+ssh_key_passphrase_protected = false  # Whether key is encrypted
+ssh_key_source = "generated"          # "generated" or "imported"
+ssh_key_type = "ed25519"              # Key algorithm type
 created_at = "2024-01-15T10:30:00Z"   # ISO format creation timestamp
 last_used = "2024-01-20T14:22:33Z"    # ISO format last usage (null if never used)
 ```
@@ -88,9 +104,27 @@ last_used = "2024-01-20T14:22:33Z"    # ISO format last usage (null if never use
 - `ssh_key_path`: Path to private SSH key
 - `ssh_key_public`: Public SSH key content
 
+**Enhanced SSH Metadata (v0.2.0+):**
+- `ssh_key_fingerprint`: SHA256 fingerprint for unique key identification and deduplication
+- `ssh_key_passphrase_protected`: Boolean indicating if the SSH key is encrypted with a passphrase
+- `ssh_key_source`: Source of the key ("generated" for new keys, "imported" for existing keys)
+- `ssh_key_type`: SSH key algorithm type ("ed25519", "rsa", "ecdsa", etc.)
+
 **Auto-Generated Fields:**
 - `created_at`: Profile creation timestamp
 - `last_used`: Last profile usage timestamp (updated on switch)
+
+### SSH Metadata Benefits
+
+The enhanced SSH metadata provides:
+
+🔍 **Deduplication**: Prevents importing the same SSH key multiple times using fingerprint matching
+
+🔐 **Security Awareness**: Tracks which keys are passphrase-protected for enhanced security workflows
+
+📊 **Inventory Management**: Clear visibility into key types and sources for security auditing
+
+🔧 **Intelligent Operations**: CLI commands can provide better guidance based on key characteristics
 
 ## Advanced Configuration
 

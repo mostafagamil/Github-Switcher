@@ -24,7 +24,9 @@ Example:
     success = manager.test_connection("work")
 """
 
+import hashlib
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -220,7 +222,7 @@ class SSHManager:
     def import_existing_key(
         self, profile_name: str, key_path: str, email: str
     ) -> tuple[str, str]:
-        """Import an existing SSH key for a profile by renaming (moving) it to prevent duplicates."""
+        """Import an existing SSH key for a profile by copying (non-destructive) to preserve originals."""
         existing_key = Path(key_path).expanduser()
         existing_pub = existing_key.with_suffix(".pub")
 
@@ -234,17 +236,14 @@ class SSHManager:
         if profile_key.exists():
             raise ValueError(f"Profile SSH key already exists: {profile_key}")
 
-        # Move/rename the keys (don't leave duplicates)
-        existing_key.rename(profile_key)
-        existing_pub.rename(profile_pub)
+        # Copy the keys (non-destructive - keep originals intact)
+        shutil.copy2(existing_key, profile_key)
+        shutil.copy2(existing_pub, profile_pub)
 
         # Set proper permissions
         if platform.system() != 'Windows':
             profile_key.chmod(0o600)
             profile_pub.chmod(0o644)
-
-        # Update any SSH config entries that referenced the old key path
-        self._update_ssh_config_key_paths(str(existing_key), str(profile_key))
 
         # Read public key content
         with open(profile_pub, encoding="utf-8") as f:
@@ -328,6 +327,85 @@ class SSHManager:
                 if path.exists():
                     path.unlink()
             raise RuntimeError(f"Failed to generate SSH key: {e}") from e
+
+    def generate_ssh_key_with_passphrase(self, profile_name: str, email: str, passphrase: str) -> tuple[str, str]:
+        """Generate Ed25519 SSH key pair with passphrase protection.
+
+        Creates a new Ed25519 SSH key pair with passphrase encryption for enhanced security.
+        The passphrase is used to encrypt the private key and is not stored anywhere.
+
+        Args:
+            profile_name: Unique profile identifier (used in filename)
+            email: Email address to include in public key comment
+            passphrase: Passphrase to encrypt the private key (not stored)
+
+        Returns:
+            tuple[str, str]: (private_key_path, public_key_content)
+
+        Raises:
+            ValueError: If SSH key already exists for profile
+            RuntimeError: If key generation fails
+
+        Security:
+            - Uses Ed25519 algorithm (modern, secure, fast)
+            - Private key encrypted with passphrase
+            - Sets proper permissions (600 for private, 644 for public)
+            - Passphrase is used once and discarded
+            - Includes cleanup on generation failure
+
+        Example:
+            >>> ssh_manager.generate_ssh_key_with_passphrase('work', 'john@company.com', 'secret123')
+            ('/home/user/.ssh/id_ed25519_work', 'ssh-ed25519 AAAAC3... john@company.com')
+        """
+        # Generate key paths
+        private_key_path = self.ssh_dir / f"id_ed25519_{profile_name}"
+        public_key_path = self.ssh_dir / f"id_ed25519_{profile_name}.pub"
+
+        # Check if key already exists
+        if private_key_path.exists():
+            raise ValueError(f"SSH key already exists for profile '{profile_name}'")
+
+        try:
+            # Generate Ed25519 key pair
+            private_key = ed25519.Ed25519PrivateKey.generate()
+            public_key = private_key.public_key()
+
+            # Serialize private key with passphrase encryption
+            private_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.OpenSSH,
+                encryption_algorithm=serialization.BestAvailableEncryption(passphrase.encode('utf-8')),
+            )
+
+            # Serialize public key
+            public_openssh = public_key.public_bytes(
+                encoding=serialization.Encoding.OpenSSH,
+                format=serialization.PublicFormat.OpenSSH,
+            )
+
+            # Add email comment to public key
+            public_key_content = public_openssh.decode("utf-8") + f" {email}"
+
+            # Write private key
+            with open(private_key_path, "wb") as f:
+                f.write(private_pem)
+            if platform.system() != 'Windows':
+                private_key_path.chmod(0o600)
+
+            # Write public key
+            with open(public_key_path, "w", encoding="utf-8") as f:
+                f.write(public_key_content + "\n")
+            if platform.system() != 'Windows':
+                public_key_path.chmod(0o644)
+
+            return str(private_key_path), public_key_content
+
+        except Exception as e:
+            # Clean up any partially created files
+            for path in [private_key_path, public_key_path]:
+                if path.exists():
+                    path.unlink()
+            raise RuntimeError(f"Failed to generate SSH key with passphrase: {e}") from e
 
     def get_public_key(self, profile_name: str) -> str | None:
         """Get public key content for a profile."""
@@ -524,25 +602,207 @@ Host github.com
                     pass  # Ignore errors when removing keys
 
     def test_connection(self, profile_name: str) -> bool:
-        """Test SSH connection to GitHub for profile.
+        """Test SSH connection to GitHub for profile with enhanced passphrase support.
 
-        Automatically ensures SSH config entry exists before testing.
+        Automatically ensures SSH config entry exists before testing and provides
+        helpful guidance for passphrase-protected keys.
         """
         try:
-            # Ensure SSH config entry exists for testing
+            # Use the new ssh-agent aware testing method
+            success, error_message = self.test_connection_with_agent(profile_name)
+
+            if not success:
+                # For backwards compatibility, still return boolean
+                # The detailed error message is available via test_connection_with_agent
+                return False
+
+            return True
+
+        except Exception:
+            return False
+
+    def get_key_fingerprint(self, key_path: str) -> str:
+        """Get unique SHA256 fingerprint of SSH public key for deduplication.
+
+        Args:
+            key_path: Path to SSH private key or public key file
+
+        Returns:
+            SHA256 fingerprint string, empty if key cannot be read
+        """
+        try:
+            key_path_obj = Path(key_path).expanduser()
+
+            # Try to read public key first
+            pub_path = key_path_obj.with_suffix(".pub")
+            if pub_path.exists():
+                with open(pub_path, encoding="utf-8") as f:
+                    public_key_content = f.read().strip()
+            elif key_path_obj.suffix == ".pub" and key_path_obj.exists():
+                with open(key_path_obj, encoding="utf-8") as f:
+                    public_key_content = f.read().strip()
+            else:
+                return ""
+
+            # Extract the key data (remove ssh-ed25519, ssh-rsa, etc. and comments)
+            parts = public_key_content.split()
+            if len(parts) < 2:
+                return ""
+
+            # Use the key data portion for fingerprint
+            key_data = parts[1]  # Base64 encoded key data
+
+            # Create SHA256 hash of the key data
+            fingerprint = hashlib.sha256(key_data.encode()).hexdigest()
+            return f"SHA256:{fingerprint[:16]}"  # Truncate for readability
+
+        except Exception:
+            return ""
+
+    def is_key_already_used(self, key_path: str, existing_profiles: dict) -> tuple[bool, str]:
+        """Check if SSH key is already used by any existing profile.
+
+        Args:
+            key_path: Path to SSH key to check
+            existing_profiles: Dictionary of existing profiles from config
+
+        Returns:
+            Tuple of (is_used, profile_name) - profile_name is empty if not used
+        """
+        new_fingerprint = self.get_key_fingerprint(key_path)
+        if not new_fingerprint:
+            return False, ""
+
+        for profile_name, profile_data in existing_profiles.items():
+            if isinstance(profile_data, dict) and 'ssh_key_path' in profile_data:
+                existing_fingerprint = self.get_key_fingerprint(profile_data['ssh_key_path'])
+                if existing_fingerprint and existing_fingerprint == new_fingerprint:
+                    return True, profile_name
+
+        return False, ""
+
+    def detect_passphrase_protected_key(self, key_path: str) -> bool:
+        """Detect if SSH private key is protected with a passphrase.
+
+        Args:
+            key_path: Path to SSH private key file
+
+        Returns:
+            True if key is passphrase-protected, False otherwise
+        """
+        try:
+            key_path_obj = Path(key_path).expanduser()
+            if not key_path_obj.exists():
+                return False
+
+            with open(key_path_obj, encoding="utf-8") as f:
+                content = f.read()
+
+            # Check for encrypted key markers
+            encrypted_markers = [
+                "Proc-Type: 4,ENCRYPTED",
+                "DEK-Info:",
+                "BEGIN ENCRYPTED PRIVATE KEY",
+            ]
+
+            return any(marker in content for marker in encrypted_markers)
+
+        except Exception:
+            return False
+
+    def is_key_in_ssh_agent(self, key_path: str) -> bool:
+        """Check if SSH key is currently loaded in ssh-agent.
+
+        Args:
+            key_path: Path to SSH private key file
+
+        Returns:
+            True if key is in ssh-agent, False otherwise
+        """
+        try:
+            # Get list of keys in ssh-agent
+            result = subprocess.run(
+                ["ssh-add", "-l"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode != 0:
+                return False
+
+            # Get fingerprint of our key
+            key_fingerprint = self.get_key_fingerprint(key_path)
+            if not key_fingerprint:
+                return False
+
+            # Check if our key's fingerprint appears in ssh-add output
+            agent_output = result.stdout
+            return key_fingerprint.replace("SHA256:", "") in agent_output
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return False
+
+    def add_key_to_ssh_agent(self, key_path: str) -> bool:
+        """Attempt to add SSH key to ssh-agent.
+
+        Args:
+            key_path: Path to SSH private key file
+
+        Returns:
+            True if key was added successfully, False otherwise
+        """
+        try:
+            result = subprocess.run(
+                ["ssh-add", key_path],
+                capture_output=True,
+                text=True,
+                timeout=30,  # Allow time for passphrase input
+                input="\n",  # Send empty line in case of prompts
+            )
+
+            return result.returncode == 0
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return False
+
+    def test_connection_with_agent(self, profile_name: str) -> tuple[bool, str]:
+        """Test SSH connection using ssh-agent integration.
+
+        Args:
+            profile_name: Name of the profile to test
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
             ssh_key_path = self.ssh_dir / f"id_ed25519_{profile_name}"
-            if ssh_key_path.exists():
-                # Check if config entry exists, create if missing
-                host_exists = False
-                if self.ssh_config_file.exists():
-                    with open(self.ssh_config_file, encoding="utf-8") as f:
-                        config_content = f.read()
-                        host_exists = f"github-{profile_name}" in config_content
 
-                if not host_exists:
-                    self._add_ssh_config_entry(profile_name, str(ssh_key_path))
+            if not ssh_key_path.exists():
+                return False, f"SSH key not found: {ssh_key_path}"
 
-            # Test connection using ssh command
+            # Check if key is passphrase-protected
+            is_encrypted = self.detect_passphrase_protected_key(str(ssh_key_path))
+
+            if is_encrypted:
+                # For encrypted keys, check ssh-agent
+                if not self.is_key_in_ssh_agent(str(ssh_key_path)):
+                    return False, (
+                        "Key is passphrase-protected and not in ssh-agent. "
+                        f"Try: ssh-add {ssh_key_path}"
+                    )
+
+            # Ensure SSH config entry exists for testing
+            host_exists = False
+            if self.ssh_config_file.exists():
+                with open(self.ssh_config_file, encoding="utf-8") as f:
+                    config_content = f.read()
+                    host_exists = f"github-{profile_name}" in config_content
+
+            if not host_exists:
+                self._add_ssh_config_entry(profile_name, str(ssh_key_path))
+
+            # Test connection
             result = subprocess.run(
                 ["ssh", "-T", f"github-{profile_name}"],
                 capture_output=True,
@@ -550,13 +810,19 @@ Host github.com
                 timeout=10,
             )
 
-            # GitHub SSH connection returns exit code 1 on success with message
-            return (
+            # GitHub SSH returns exit code 1 on successful auth
+            success = (
                 result.returncode == 1 and "successfully authenticated" in result.stderr
             )
 
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-            return False
+            if not success:
+                error_msg = result.stderr or result.stdout or "Connection failed"
+                return False, error_msg
+
+            return True, "Connection successful"
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+            return False, f"Connection test failed: {e}"
 
     def regenerate_ssh_key(self, profile_name: str, email: str) -> tuple[str, str]:
         """Regenerate SSH key for existing profile."""
@@ -570,3 +836,18 @@ Host github.com
 
         # Generate new key
         return self.generate_ssh_key(profile_name, email)
+
+    def regenerate_ssh_key_with_passphrase(
+        self, profile_name: str, email: str, passphrase: str
+    ) -> tuple[str, str]:
+        """Regenerate SSH key for existing profile with passphrase protection."""
+        # Remove existing key
+        private_key_path = self.ssh_dir / f"id_ed25519_{profile_name}"
+        public_key_path = self.ssh_dir / f"id_ed25519_{profile_name}.pub"
+
+        for key_path in [private_key_path, public_key_path]:
+            if key_path.exists():
+                key_path.unlink()
+
+        # Generate new passphrase-protected key
+        return self.generate_ssh_key_with_passphrase(profile_name, email, passphrase)

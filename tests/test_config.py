@@ -329,3 +329,77 @@ class TestConfig:
             profile = config.get_profile("test")
             assert profile["name"] == "Original"  # Should NOT be overwritten
             assert profile["email"] == "original@example.com"
+
+    def test_export_profiles_without_private_keys(self, config):
+        """Test exporting profiles without private keys."""
+        # Add a test profile
+        config.add_profile(
+            "export-test",
+            "Export User",
+            "export@example.com",
+            "/path/to/private/key",
+            "ssh-ed25519 AAAAC3... export@example.com",
+        )
+
+        # Export without private keys (default)
+        exported = config.export_profiles(include_private_keys=False)
+
+        assert "meta" in exported
+        assert "profiles" in exported
+        assert "export-test" in exported["profiles"]
+
+        profile_data = exported["profiles"]["export-test"]
+        assert profile_data["name"] == "Export User"
+        assert profile_data["email"] == "export@example.com"
+        assert profile_data["ssh_key_public"] == "ssh-ed25519 AAAAC3... export@example.com"
+
+        # Should NOT include private key path
+        assert "ssh_key_path" not in profile_data
+
+    def test_export_profiles_with_private_keys(self, config):
+        """Test exporting profiles with private keys."""
+        # Add a test profile
+        config.add_profile(
+            "export-test",
+            "Export User",
+            "export@example.com",
+            "/path/to/private/key",
+            "ssh-ed25519 AAAAC3... export@example.com",
+        )
+
+        # Export WITH private keys
+        exported = config.export_profiles(include_private_keys=True)
+
+        assert "meta" in exported
+        assert "profiles" in exported
+        assert "export-test" in exported["profiles"]
+
+        profile_data = exported["profiles"]["export-test"]
+        assert profile_data["name"] == "Export User"
+        assert profile_data["email"] == "export@example.com"
+        assert profile_data["ssh_key_public"] == "ssh-ed25519 AAAAC3... export@example.com"
+
+        # SHOULD include private key path when requested
+        assert profile_data["ssh_key_path"] == "/path/to/private/key"
+
+    def test_get_all_profiles(self, config):
+        """Test getting all profiles."""
+        # Initially should be empty
+        profiles = config.get_all_profiles()
+        assert profiles == {}
+
+        # Add some profiles
+        config.add_profile(
+            "profile1", "User 1", "user1@example.com", "/path/key1", "ssh-key1"
+        )
+        config.add_profile(
+            "profile2", "User 2", "user2@example.com", "/path/key2", "ssh-key2"
+        )
+
+        # Should return all profiles
+        profiles = config.get_all_profiles()
+        assert len(profiles) == 2
+        assert "profile1" in profiles
+        assert "profile2" in profiles
+        assert profiles["profile1"]["name"] == "User 1"
+        assert profiles["profile2"]["name"] == "User 2"

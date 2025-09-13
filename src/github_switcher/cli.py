@@ -116,6 +116,7 @@ def list_profiles() -> None:
         table.add_column("Profile", style="cyan", no_wrap=True)
         table.add_column("Name", style="green")
         table.add_column("Email", style="yellow")
+        table.add_column("SSH Security", justify="center")
         table.add_column("Status", justify="center")
         table.add_column("Last Used", style="dim")
 
@@ -123,10 +124,15 @@ def list_profiles() -> None:
             status = "🟢 Active" if profile_name == current else "⚪ Inactive"
             last_used = profile_data.get("last_used", "Never")
 
+            # SSH security status
+            ssh_passphrase_protected = profile_data.get("ssh_key_passphrase_protected", False)
+            ssh_security = "🔐 Protected" if ssh_passphrase_protected else "🔓 Unprotected"
+
             table.add_row(
                 profile_name,
                 profile_data["name"],
                 profile_data["email"],
+                ssh_security,
                 status,
                 last_used,
             )
@@ -409,9 +415,31 @@ def test_ssh_connection(
             )
         else:
             console.print(f"❌ [red]SSH connection failed for '{matched_profile}'[/red]")
-            console.print(
-                "💡 Make sure you've added the SSH key to your GitHub account"
-            )
+
+            # Get profile data to check SSH key path
+            profile_data = profile_manager.get_profile(matched_profile)
+            if profile_data and profile_data.get("ssh_key_path"):
+                ssh_key_path = profile_data["ssh_key_path"]
+
+                # Check if key is passphrase protected
+                if ssh_manager.detect_passphrase_protected_key(ssh_key_path):
+                    console.print("🔐 [yellow]This profile uses a passphrase-protected SSH key[/yellow]")
+
+                    # Check if key is in ssh-agent
+                    if not ssh_manager.is_key_in_ssh_agent(ssh_key_path):
+                        console.print("💡 [blue]Add the key to ssh-agent:[/blue]")
+                        from pathlib import Path
+                        key_name = Path(ssh_key_path).name
+                        console.print(f"   ssh-add ~/.ssh/{key_name}")
+                    else:
+                        console.print("🔑 [green]Key is in ssh-agent[/green]")
+                        console.print("💡 [yellow]Make sure you've added the SSH key to your GitHub account[/yellow]")
+                else:
+                    console.print("💡 [yellow]Make sure you've added the SSH key to your GitHub account[/yellow]")
+            else:
+                console.print("💡 [yellow]Make sure you've added the SSH key to your GitHub account[/yellow]")
+
+            console.print("🔗 Add key at: https://github.com/settings/keys")
             raise typer.Exit(1)
 
     except KeyboardInterrupt:
@@ -472,22 +500,92 @@ def regenerate_ssh_key(
             console.print("❌ [yellow]Key regeneration cancelled[/yellow]")
             return
 
+        # Ask about passphrase protection
+        console.print("\n🔐 [bold]SSH Key Options[/bold]")
+        protect_with_passphrase = typer.confirm(
+            "🔐 Protect new SSH key with passphrase?",
+            default=False
+        )
+
         # Get email safely
         profile_email = str(profile_data.get("email", ""))
         if not profile_email:
             console.print(f"❌ [red]Profile '{matched_profile}' has no email configured[/red]")
             raise typer.Exit(1)
 
-        with console.status(f"🔄 Regenerating SSH key for '{matched_profile}'..."):
-            # Regenerate the key
-            new_key_path, new_public_key = ssh_manager.regenerate_ssh_key(
-                matched_profile, profile_email
-            )
+        # Handle passphrase input if needed
+        passphrase: str | None = None
+        passphrase_confirm: str | None = None
+        if protect_with_passphrase:
+            import getpass
+            console.print("ℹ️ [yellow]Enter passphrase to encrypt your SSH key (for enhanced security)[/yellow]")
 
-            # Update profile with new key info
-            profile_manager.update_profile(
-                matched_profile, ssh_key_path=new_key_path, ssh_key_public=new_public_key
-            )
+            while True:
+                passphrase = getpass.getpass("🔐 Enter passphrase: ").strip()
+                if len(passphrase) < 8:
+                    console.print("❌ [red]Passphrase must be at least 8 characters[/red]")
+                    continue
+
+                passphrase_confirm = getpass.getpass("🔐 Confirm passphrase: ").strip()
+                if passphrase != passphrase_confirm:
+                    console.print("❌ [red]Passphrases don't match[/red]")
+                    continue
+
+                break
+
+        with console.status(f"🔄 Regenerating SSH key for '{matched_profile}'..."):
+            # Regenerate the key with passphrase support
+            if protect_with_passphrase and passphrase:
+                new_key_path, new_public_key = ssh_manager.regenerate_ssh_key_with_passphrase(
+                    matched_profile, profile_email, passphrase
+                )
+
+                # Add key to ssh-agent for immediate use
+                if not ssh_manager.is_key_in_ssh_agent(new_key_path):
+                    console.print("🔑 [yellow]Adding new key to ssh-agent...[/yellow]")
+                    ssh_manager.add_key_to_ssh_agent(new_key_path)
+
+                # Clear passphrase from memory
+                if 'passphrase' in locals():
+                    del passphrase
+                if 'passphrase_confirm' in locals():
+                    del passphrase_confirm
+            else:
+                new_key_path, new_public_key = ssh_manager.regenerate_ssh_key(
+                    matched_profile, profile_email
+                )
+
+            # Collect metadata for the regenerated key
+            try:
+                key_fingerprint = ssh_manager.get_key_fingerprint(new_key_path)
+                key_passphrase_protected = protect_with_passphrase
+                key_type = "ed25519"  # Default for regenerated keys
+
+                # Determine key type from public key
+                if new_public_key.startswith("ssh-ed25519"):
+                    key_type = "ed25519"
+                elif new_public_key.startswith("ssh-rsa"):
+                    key_type = "rsa"
+                elif new_public_key.startswith("ecdsa-"):
+                    key_type = "ecdsa"
+
+                # Update profile with new key info and metadata
+                profile_manager.update_profile(
+                    matched_profile,
+                    ssh_key_path=new_key_path,
+                    ssh_key_public=new_public_key,
+                    ssh_key_fingerprint=key_fingerprint,
+                    ssh_key_passphrase_protected=key_passphrase_protected,
+                    ssh_key_source="generated",  # Regenerated keys are always generated
+                    ssh_key_type=key_type,
+                )
+
+            except Exception as metadata_error:
+                # If metadata collection fails, still update basic key info
+                console.print(f"⚠️ [yellow]Warning: Could not collect key metadata: {metadata_error}[/yellow]")
+                profile_manager.update_profile(
+                    matched_profile, ssh_key_path=new_key_path, ssh_key_public=new_public_key
+                )
 
         # Copy new key to clipboard
         ssh_manager.copy_public_key_to_clipboard(matched_profile)
@@ -531,6 +629,7 @@ def detect_existing_setup() -> None:
             table = Table(show_header=True, header_style="bold magenta")
             table.add_column("Key Name", style="cyan")
             table.add_column("Type", style="yellow")
+            table.add_column("Encrypted", style="magenta")
             table.add_column("Comment", style="white")
             table.add_column("GitHub Ready", style="green")
 
@@ -539,9 +638,18 @@ def detect_existing_setup() -> None:
                 if not key["github_compatible"]:
                     github_status = "❌ No"
 
+                # Check if key is passphrase protected
+                encrypted_status = "⚪ Unknown"
+                if key.get("path"):
+                    if ssh_manager.detect_passphrase_protected_key(key["path"]):
+                        encrypted_status = "🔐 Yes"
+                    else:
+                        encrypted_status = "🔓 No"
+
                 table.add_row(
                     key["name"],
                     key["type"],
+                    encrypted_status,
                     key["comment"] if key["comment"] else "[dim]no comment[/dim]",
                     github_status
                 )

@@ -1,10 +1,11 @@
 """Configuration management for GitHub Switcher."""
 
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import toml
+
+from .utils import get_config_directory
 
 
 class Config:
@@ -12,7 +13,7 @@ class Config:
 
     def __init__(self) -> None:
         """Initialize configuration manager."""
-        self.config_dir = Path.home() / ".config" / "github-switcher"
+        self.config_dir = get_config_directory()
         self.profiles_file = self.config_dir / "profiles.toml"
         self._ensure_config_dir()
 
@@ -54,8 +55,12 @@ class Config:
         email: str,
         ssh_key_path: str,
         ssh_public_key: str,
+        ssh_key_fingerprint: str | None = None,
+        ssh_key_passphrase_protected: bool = False,
+        ssh_key_source: str = "generated",
+        ssh_key_type: str = "ed25519",
     ) -> None:
-        """Add a new profile to configuration."""
+        """Add a new profile to configuration with enhanced SSH metadata."""
         data = self.load_profiles()
 
         if name in data["profiles"]:
@@ -66,6 +71,10 @@ class Config:
             "email": email,
             "ssh_key_path": ssh_key_path,
             "ssh_key_public": ssh_public_key,
+            "ssh_key_fingerprint": ssh_key_fingerprint,
+            "ssh_key_passphrase_protected": ssh_key_passphrase_protected,
+            "ssh_key_source": ssh_key_source,  # "generated" or "imported"
+            "ssh_key_type": ssh_key_type,  # "ed25519", "rsa", etc.
             "created_at": datetime.now().isoformat(),
             "last_used": None,
         }
@@ -140,6 +149,10 @@ class Config:
                 "name": profile["name"],
                 "email": profile["email"],
                 "ssh_key_public": profile["ssh_key_public"],
+                "ssh_key_fingerprint": profile.get("ssh_key_fingerprint"),
+                "ssh_key_passphrase_protected": profile.get("ssh_key_passphrase_protected", False),
+                "ssh_key_source": profile.get("ssh_key_source", "generated"),
+                "ssh_key_type": profile.get("ssh_key_type", "ed25519"),
                 "created_at": profile["created_at"],
                 "last_used": profile.get("last_used"),
             }
@@ -161,11 +174,15 @@ class Config:
             if name in data["profiles"] and not overwrite:
                 continue  # Skip existing profiles if not overwriting
 
-            # Import profile data
+            # Import profile data with backward compatibility
             data["profiles"][name] = {
                 "name": profile["name"],
                 "email": profile["email"],
                 "ssh_key_public": profile["ssh_key_public"],
+                "ssh_key_fingerprint": profile.get("ssh_key_fingerprint"),
+                "ssh_key_passphrase_protected": profile.get("ssh_key_passphrase_protected", False),
+                "ssh_key_source": profile.get("ssh_key_source", "generated"),
+                "ssh_key_type": profile.get("ssh_key_type", "ed25519"),
                 "created_at": profile["created_at"],
                 "last_used": profile.get("last_used"),
                 "ssh_key_path": profile.get(

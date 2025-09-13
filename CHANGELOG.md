@@ -14,6 +14,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shell integration and completion
 - Web-based configuration UI
 
+## [0.2.0] - 2025-09-13
+
+### Added
+- **🔒 Passphrase-Protected SSH Keys**: Generate and manage encrypted SSH keys for enhanced security
+- **🔍 SSH Key Fingerprinting**: SHA256 fingerprint generation for unique key identification and deduplication
+- **🔌 SSH Agent Integration**: Intelligent detection and management of keys loaded in ssh-agent
+- **🛡️ Advanced Connection Testing**: Comprehensive SSH diagnostics with specific error guidance and recovery suggestions
+- **📊 Enhanced Detection Command**: Rich SSH environment analysis with security insights and key metadata
+- **🔧 Non-Destructive Key Operations**: Copy (don't move/rename) existing keys to preserve original SSH setup
+- **📈 Profile Metadata Tracking**: Enhanced profile storage with SSH key attributes, usage history, and security status
+
+### Enhanced
+- **CLI Commands**: All SSH-related commands now provide richer feedback and intelligent error guidance
+- **Interactive Wizards**: Streamlined key creation flow with security options and better user experience
+- **List Command**: Now displays SSH security status (🔐 Protected/🔓 Unprotected) for all profiles  
+- **SSH Configuration Management**: Improved handling of complex SSH setups with conflict detection
+- **Error Handling**: More specific error messages with actionable solutions for SSH connectivity issues
+
+### Technical Improvements
+- **Test Coverage**: Expanded from basic testing to 260+ comprehensive tests with 80%+ coverage
+- **Type Safety**: Enhanced type annotations and mypy validation across all SSH management code
+- **Security**: Implemented industry-standard SSH key security practices and validation
+- **Performance**: Optimized key detection and SSH operations for better responsiveness
+
+### Commands Updated
+- `ghsw regenerate-key [profile]` - Now supports passphrase protection options
+- `ghsw test [profile]` - Comprehensive connection testing with detailed diagnostics
+- `ghsw detect` - Rich SSH environment analysis with security insights
+- `ghsw create` - Enhanced wizard with advanced SSH options and better key detection
+
 ## [0.1.0] - 2025-09-06
 
 ### Added

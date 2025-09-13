@@ -1,6 +1,6 @@
-# Smart SSH Key Management
+# Advanced SSH Key Management
 
-GitHub Switcher provides intelligent SSH key management with automatic detection, duplicate prevention, and clean organization.
+GitHub Switcher provides enterprise-grade SSH key management with automatic detection, deduplication, passphrase protection, ssh-agent integration, and intelligent connection testing.
 
 ## Comprehensive SSH Detection
 
@@ -19,11 +19,14 @@ ghsw create
 ```
 
 **What Gets Detected:**
-- **SSH Connectivity**: Tests actual connection to GitHub
-- **All SSH Keys**: Scans `~/.ssh/` for Ed25519, RSA, ECDSA keys
+- **SSH Connectivity**: Tests actual connection to GitHub with intelligent error analysis
+- **All SSH Keys**: Scans `~/.ssh/` for Ed25519, RSA, ECDSA keys with format validation
+- **Key Fingerprinting**: SHA256 fingerprints for deduplication and identification
+- **Passphrase Protection**: Automatically detects encrypted vs unencrypted keys
+- **SSH Agent Integration**: Checks if keys are loaded in ssh-agent
 - **Profile Associations**: Shows which keys are already used by profiles
-- **GitHub Compatibility**: Identifies recommended key types
-- **SSH Configuration**: Analyzes existing GitHub entries
+- **GitHub Compatibility**: Identifies recommended key types and security levels
+- **SSH Configuration**: Analyzes existing GitHub entries with conflict detection
 
 ## Smart SSH Strategy Selection
 
@@ -99,6 +102,77 @@ For advanced users who want manual control:
 - You're using SSH certificates or other advanced setups
 - You want to set up keys manually later
 - You're testing or troubleshooting
+
+## 🔒 Enhanced Security Features
+
+### Passphrase-Protected SSH Keys
+
+GitHub Switcher now supports passphrase-protected SSH keys for enhanced security:
+
+```bash
+# Generate a passphrase-protected key
+ghsw regenerate-key work
+# Output:
+🔐 SSH Key Options
+🔐 Protect new SSH key with passphrase? [y/N]: y
+🔑 Enter passphrase for SSH key: [secure input]
+✅ Generated passphrase-protected SSH key for work
+🔐 Key encrypted and saved securely
+```
+
+**Benefits:**
+- **Enhanced Security**: Even if your key file is compromised, it's encrypted
+- **Industry Standard**: Follows enterprise security best practices
+- **SSH Agent Integration**: Works seamlessly with ssh-agent for convenience
+
+### Automatic Passphrase Detection
+
+The system automatically detects passphrase-protected keys:
+
+```bash
+ghsw test work
+# For encrypted keys not in ssh-agent:
+❌ SSH key is passphrase-protected and not in ssh-agent
+💡 Try: ssh-add ~/.ssh/id_ed25519_work
+```
+
+### SSH Agent Integration
+
+GitHub Switcher intelligently manages ssh-agent integration:
+
+**Automatic Detection:**
+- Checks if keys are loaded in ssh-agent
+- Provides helpful guidance for encrypted keys
+- Suggests proper ssh-add commands
+
+**Connection Testing:**
+```bash
+ghsw test work
+# Intelligent connection testing:
+# 1. Checks if key exists
+# 2. Detects if key is encrypted
+# 3. Verifies ssh-agent status
+# 4. Tests actual GitHub connection
+# 5. Provides specific error guidance
+```
+
+### Key Fingerprinting & Deduplication
+
+Advanced key management prevents duplicates:
+
+```bash
+ghsw detect
+# Output shows fingerprints:
+🔑 Found SSH keys:
+  ✅ id_ed25519_work (SHA256:abc123...) → work profile
+  ✅ id_ed25519 (SHA256:def456...) 
+  ⚠️ id_rsa (SHA256:ghi789...) - RSA key detected
+```
+
+**Features:**
+- **SHA256 Fingerprints**: Unique identification for each key
+- **Duplicate Prevention**: Never import the same key twice
+- **Profile Tracking**: See which profile uses which key
 
 ## SSH Configuration Management
 
@@ -206,6 +280,90 @@ GitHub allows max 5 SSH keys per account:
 2. **Reuse keys** by importing instead of generating new ones
 3. **Use GitHub fine-grained tokens** as an alternative
 4. **Use multiple GitHub accounts** if you need more separation
+
+## 🚀 Enhanced CLI Commands
+
+### Intelligent SSH Key Regeneration
+
+The `regenerate-key` command now offers advanced options:
+
+```bash
+ghsw regenerate-key work
+# Interactive options:
+🔐 SSH Key Options
+🔐 Protect new SSH key with passphrase? [y/N]: 
+🔧 Keep existing fingerprint for profile tracking? [Y/n]:
+✅ Regenerated SSH key with enhanced security options
+📋 New SSH public key copied to clipboard
+```
+
+### Advanced Connection Testing
+
+The `test` command provides comprehensive diagnostics:
+
+```bash
+ghsw test work
+# Comprehensive output:
+🔍 Testing SSH connection for 'work' profile...
+✅ SSH key file exists: ~/.ssh/id_ed25519_work
+🔐 Key is passphrase-protected
+✅ Key is loaded in ssh-agent
+✅ SSH config entry is properly configured  
+✅ GitHub connection successful
+🎯 Profile 'work' is ready to use
+```
+
+**Error scenarios with guidance:**
+```bash
+# Encrypted key not in agent:
+❌ Key is passphrase-protected and not in ssh-agent
+💡 Try: ssh-add ~/.ssh/id_ed25519_work
+
+# SSH config issues:
+❌ SSH config entry missing or invalid
+💡 Try: ghsw switch work  # Rebuilds SSH config
+
+# GitHub connection problems:
+❌ GitHub rejected SSH connection
+💡 Ensure key is added to GitHub account settings
+```
+
+### Enhanced Detection Command
+
+The `detect` command now provides rich SSH environment analysis:
+
+```bash
+ghsw detect
+# Comprehensive SSH environment report:
+🔍 Analyzing SSH environment...
+
+📊 SSH Key Analysis:
+  🔑 Total keys found: 4
+  ✅ Ed25519 keys: 2 (recommended)
+  ⚠️  RSA keys: 2 (legacy)
+  🔐 Passphrase-protected: 1
+  🔓 Unencrypted: 3
+
+🏷️  Profile Associations:
+  ✅ work → id_ed25519_work (SHA256:abc123...)
+  ✅ personal → id_ed25519_personal (SHA256:def456...)
+  🔄 Available for import: id_rsa_old (SHA256:ghi789...)
+
+🔌 SSH Agent Status:
+  ✅ ssh-agent running
+  🔑 2 keys loaded in agent
+  🔐 1 encrypted key needs loading
+
+⚙️  SSH Configuration:
+  ✅ GitHub Switcher entries: 2
+  ⚠️  Legacy entries detected: 1
+  🔧 Backup available: ~/.ssh/config.github-switcher-backup
+
+🌐 GitHub Connectivity:
+  ✅ Primary connection working
+  ✅ Profile-specific connections tested
+  📈 All connections optimal
+```
 
 ## Advanced Configurations
 

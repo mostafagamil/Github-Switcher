@@ -186,8 +186,8 @@ class TestListProfiles:
     def test_list_profiles_with_data(self, runner, mock_managers):
         """Test listing existing profiles."""
         profiles = {
-            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"},
-            "personal": {"name": "Personal User", "email": "personal@example.com", "last_used": "Never"}
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01", "ssh_key_passphrase_protected": False},
+            "personal": {"name": "Personal User", "email": "personal@example.com", "last_used": "Never", "ssh_key_passphrase_protected": False}
         }
         mock_managers['profile'].list_profiles.return_value = profiles
         mock_managers['profile'].get_current_profile.return_value = "work"
@@ -197,7 +197,32 @@ class TestListProfiles:
         assert "work" in result.stdout
         assert "personal" in result.stdout
         assert "Work User" in result.stdout
-        assert "Personal User" in result.stdout
+        assert "Personal" in result.stdout
+        assert "User" in result.stdout
+        # Check for SSH Security column
+        assert "SSH" in result.stdout
+        assert "Security" in result.stdout
+        assert "🔓" in result.stdout
+        assert "Unprotected" in result.stdout
+
+    def test_list_profiles_with_protected_ssh(self, runner, mock_managers):
+        """Test listing profiles with passphrase-protected SSH keys."""
+        profiles = {
+            "secure": {"name": "Secure User", "email": "secure@example.com", "last_used": "2024-01-01", "ssh_key_passphrase_protected": True},
+            "basic": {"name": "Basic User", "email": "basic@example.com", "last_used": "Never", "ssh_key_passphrase_protected": False}
+        }
+        mock_managers['profile'].list_profiles.return_value = profiles
+        mock_managers['profile'].get_current_profile.return_value = "secure"
+
+        result = runner.invoke(app, ["list"])
+        assert result.exit_code == 0
+        assert "secure" in result.stdout
+        assert "basic" in result.stdout
+        # Check for both protected and unprotected indicators
+        assert "🔐" in result.stdout
+        assert "Protected" in result.stdout
+        assert "🔓" in result.stdout
+        assert "Unprotected" in result.stdout
 
     def test_list_profiles_error_handling(self, runner, mock_managers):
         """Test error handling during profile listing."""
@@ -401,7 +426,12 @@ class TestRegenerateSSHKey:
         mock_managers['ssh'].regenerate_ssh_key.return_value = ("/path/key", "ssh-ed25519 ABC...")
         mock_managers['ssh'].copy_public_key_to_clipboard.return_value = True
 
-        result = runner.invoke(app, ["regenerate-key", "work"], input="y\n")
+        # Mock new methods needed for enhanced regenerate-key
+        mock_managers['ssh'].get_key_fingerprint.return_value = "SHA256:abcd1234"
+        mock_managers['profile'].update_profile.return_value = None
+
+        # Input: y (confirm regenerate) + n (no passphrase)
+        result = runner.invoke(app, ["regenerate-key", "work"], input="y\nn\n")
         assert result.exit_code == 0
         assert "SSH key regenerated for 'work'" in result.stdout
         assert "New public key copied to clipboard!" in result.stdout
@@ -444,6 +474,31 @@ class TestRegenerateSSHKey:
         result = runner.invoke(app, ["regenerate-key", "work"])
         assert result.exit_code == 1
         assert "Error regenerating SSH key: Get failed" in result.stdout
+
+    @patch('github_switcher.wizard.getpass.getpass')
+    def test_regenerate_ssh_key_with_passphrase_protection(self, mock_getpass, runner, mock_managers):
+        """Test regenerating SSH key with passphrase protection updates metadata."""
+        mock_managers['profile'].list_profiles.return_value = {'work': {'email': 'john@company.com'}}
+        mock_managers['profile'].profile_exists.return_value = True
+        mock_managers['profile'].get_profile.return_value = {"email": "work@example.com"}
+        mock_managers['ssh'].regenerate_ssh_key_with_passphrase.return_value = ("/path/protected_key", "ssh-ed25519 PROTECTED...")
+        mock_managers['ssh'].copy_public_key_to_clipboard.return_value = True
+        mock_managers['ssh'].get_key_fingerprint.return_value = "SHA256:newprotected123"
+        mock_managers['profile'].update_profile.return_value = None
+
+        # Mock passphrase input
+        mock_getpass.side_effect = ["testpass123", "testpass123"]
+
+        # Input: y (confirm regenerate) + y (use passphrase)
+        result = runner.invoke(app, ["regenerate-key", "work"], input="y\ny\n")
+        assert result.exit_code == 0
+        assert "SSH key regenerated for 'work'" in result.stdout
+        assert "New public key copied to clipboard!" in result.stdout
+
+        # Verify profile was updated with passphrase protection metadata
+        mock_managers['profile'].update_profile.assert_called_once()
+        update_call_kwargs = mock_managers['profile'].update_profile.call_args[1]
+        assert update_call_kwargs['ssh_key_passphrase_protected'] is True
 
 
 class TestDetectExistingSetup:
@@ -547,3 +602,344 @@ class TestMainCallback:
         # Should exit with 0 and show help text
         assert result.returncode == 0
         assert "GitHub profile switcher" in result.stdout.lower() or "usage" in result.stdout.lower()
+
+
+class TestKeyboardInterruptHandling:
+    """Test keyboard interrupt handling in CLI commands."""
+
+    def test_create_profile_keyboard_interrupt(self, runner, mock_managers):
+        """Test that KeyboardInterrupt is handled gracefully in create_profile."""
+        # Mock the wizard to raise KeyboardInterrupt
+        mock_managers['wizard'].create_profile_interactive.side_effect = KeyboardInterrupt()
+
+        result = runner.invoke(app, ['create'])
+
+        # Should exit with code 1 and show cancellation message
+        assert result.exit_code == 1
+        assert "Operation cancelled by user" in result.stdout
+
+    def test_create_profile_quick_mode_keyboard_interrupt(self, runner, mock_managers):
+        """Test KeyboardInterrupt handling in quick mode profile creation."""
+        # Mock the wizard to raise KeyboardInterrupt
+        mock_managers['wizard'].create_profile_quick.side_effect = KeyboardInterrupt()
+
+        result = runner.invoke(app, [
+            'create', '--name', 'test', '--fullname', 'Test User', '--email', 'test@example.com'
+        ])
+
+        assert result.exit_code == 1
+        assert "Operation cancelled by user" in result.stdout
+
+
+class TestInteractiveProfileSelectionEdgeCases:
+    """Test edge cases in interactive profile selection."""
+
+    def test_interactive_selection_empty_input_no_retry(self, runner, mock_managers):
+        """Test interactive selection with empty input (single attempt)."""
+        # Mock profile data
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"},
+            "personal": {"name": "Personal User", "email": "personal@example.com", "last_used": "Never"}
+        }
+        mock_managers['profile'].get_current_profile.return_value = None
+
+        # Mock user input: empty (which should be treated as no selection)
+        with patch('rich.prompt.Prompt.ask', return_value=""):
+            result = runner.invoke(app, ['switch'])
+
+        # Should fail because empty input is treated as no selection
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_interactive_selection_out_of_range_number(self, runner, mock_managers):
+        """Test interactive selection with out-of-range number."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+        mock_managers['profile'].get_current_profile.return_value = None
+
+        # Mock user input: out of range number (returns None from selection)
+        with patch('rich.prompt.Prompt.ask', return_value="5"):
+            result = runner.invoke(app, ['switch'])
+
+        # Should fail because 5 is out of range
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_interactive_selection_keyboard_interrupt(self, runner, mock_managers):
+        """Test canceling interactive selection with KeyboardInterrupt."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+        mock_managers['profile'].get_current_profile.return_value = None
+
+        # Mock user input: KeyboardInterrupt
+        with patch('rich.prompt.Prompt.ask', side_effect=KeyboardInterrupt()):
+            result = runner.invoke(app, ['switch'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+
+class TestErrorHandlingEdgeCases:
+    """Test error handling edge cases."""
+
+    def test_switch_profile_runtime_error(self, runner, mock_managers):
+        """Test switch profile with runtime error from profile manager."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock switch_profile to raise RuntimeError
+        mock_managers['profile'].switch_profile.side_effect = RuntimeError("SSH configuration failed")
+
+        result = runner.invoke(app, ['switch', 'work'])
+
+        assert result.exit_code == 1
+        assert "SSH configuration failed" in result.stdout
+
+    def test_delete_profile_runtime_error(self, runner, mock_managers):
+        """Test delete profile with runtime error."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock delete_profile to raise RuntimeError
+        mock_managers['profile'].delete_profile.side_effect = RuntimeError("Failed to delete SSH key")
+
+        with patch('typer.confirm', return_value=True):
+            result = runner.invoke(app, ['delete', 'work'])
+
+        assert result.exit_code == 1
+        assert "Failed to delete SSH key" in result.stdout
+
+    def test_current_profile_exception_handling(self, runner, mock_managers):
+        """Test current profile command with exception."""
+        mock_managers['profile'].get_current_profile.side_effect = Exception("Config file corrupted")
+
+        result = runner.invoke(app, ['current'])
+
+        assert result.exit_code == 1
+        assert "Config file corrupted" in result.stdout
+
+
+class TestRegenerateSSHKeyEdgeCases:
+    """Test edge cases in SSH key regeneration."""
+
+    def test_regenerate_key_interactive_selection_cancel(self, runner, mock_managers):
+        """Test regenerating key with interactive selection cancelled."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock interactive selection with KeyboardInterrupt to properly cancel
+        with patch('rich.prompt.Prompt.ask', side_effect=KeyboardInterrupt()):
+            result = runner.invoke(app, ['regenerate-key'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_regenerate_key_profile_data_missing(self, runner, mock_managers):
+        """Test regenerating key when profile data is missing."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+        mock_managers['profile'].get_profile.return_value = None
+
+        with patch('typer.confirm', return_value=True):
+            result = runner.invoke(app, ['regenerate-key', 'work'])
+
+        assert result.exit_code == 1
+        assert "Profile 'work' data not found" in result.stdout
+
+    def test_regenerate_key_wizard_error(self, runner, mock_managers):
+        """Test regenerating key with wizard error."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+        mock_managers['profile'].get_profile.return_value = {
+            "name": "Work User", "email": "work@example.com"
+        }
+
+        # Mock wizard to raise exception
+        mock_managers['wizard'].regenerate_ssh_key.side_effect = Exception("Key generation failed")
+
+        with patch('typer.confirm', return_value=True), \
+             patch('github_switcher.wizard.getpass.getpass', return_value="testpass"):
+            result = runner.invoke(app, ['regenerate-key', 'work'])
+
+        assert result.exit_code == 1
+        assert "Error regenerating SSH key" in result.stdout
+
+
+class TestCopySSHKeyEdgeCases:
+    """Test edge cases in copying SSH keys."""
+
+    def test_copy_key_interactive_selection_cancel(self, runner, mock_managers):
+        """Test copying key with interactive selection cancelled."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock interactive selection with KeyboardInterrupt to properly cancel
+        with patch('rich.prompt.Prompt.ask', side_effect=KeyboardInterrupt()):
+            result = runner.invoke(app, ['copy-key'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_copy_key_ssh_manager_exception(self, runner, mock_managers):
+        """Test copying key with SSH manager exception."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock SSH manager to raise exception
+        mock_managers['ssh'].copy_public_key_to_clipboard.side_effect = Exception("Clipboard not available")
+
+        result = runner.invoke(app, ['copy-key', 'work'])
+
+        assert result.exit_code == 1
+        assert "Clipboard not available" in result.stdout
+
+
+class TestSSHConnectionEdgeCases:
+    """Test edge cases in SSH connection testing."""
+
+    def test_test_connection_interactive_selection_cancel(self, runner, mock_managers):
+        """Test SSH connection test with interactive selection cancelled."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock interactive selection with KeyboardInterrupt to properly cancel
+        with patch('rich.prompt.Prompt.ask', side_effect=KeyboardInterrupt()):
+            result = runner.invoke(app, ['test'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_test_connection_ssh_manager_exception(self, runner, mock_managers):
+        """Test SSH connection test with SSH manager exception."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "work": {"name": "Work User", "email": "work@example.com", "last_used": "2024-01-01"}
+        }
+
+        # Mock SSH manager to raise exception
+        mock_managers['ssh'].test_connection.side_effect = Exception("Network unreachable")
+
+        result = runner.invoke(app, ['test', 'work'])
+
+        assert result.exit_code == 1
+        assert "Error testing SSH connection" in result.stdout
+
+
+class TestDetectExistingSetupEdgeCases:
+    """Test edge cases in detecting existing setup."""
+
+    def test_detect_existing_setup_ssh_manager_exception(self, runner, mock_managers):
+        """Test detect existing setup with SSH manager exception."""
+        # Mock SSH manager to raise exception
+        mock_managers['ssh'].detect_existing_github_setup.side_effect = Exception("Permission denied")
+
+        result = runner.invoke(app, ['detect'])
+
+        assert result.exit_code == 1
+        assert "Permission denied" in result.stdout
+
+
+class TestAdditionalCoverageEdgeCases:
+    """Test additional edge cases to improve coverage."""
+
+    def test_interactive_switch_no_profiles(self, runner, mock_managers):
+        """Test interactive switch when no profiles exist."""
+        mock_managers['profile'].list_profiles.return_value = {}
+
+        result = runner.invoke(app, ['switch'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_interactive_copy_key_no_profiles(self, runner, mock_managers):
+        """Test interactive copy-key when no profiles exist."""
+        mock_managers['profile'].list_profiles.return_value = {}
+
+        result = runner.invoke(app, ['copy-key'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_interactive_test_connection_no_profiles(self, runner, mock_managers):
+        """Test interactive test connection when no profiles exist."""
+        mock_managers['profile'].list_profiles.return_value = {}
+
+        result = runner.invoke(app, ['test'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_interactive_regenerate_key_no_profiles(self, runner, mock_managers):
+        """Test interactive regenerate-key when no profiles exist."""
+        mock_managers['profile'].list_profiles.return_value = {}
+
+        result = runner.invoke(app, ['regenerate-key'])
+
+        assert result.exit_code == 1
+        assert "No profile selected" in result.stdout
+
+    def test_create_profile_with_ssh_key_option(self, runner, mock_managers):
+        """Test create profile with --ssh-key option for importing existing key."""
+        mock_managers['wizard'].create_profile_quick.return_value = True
+
+        result = runner.invoke(app, [
+            'create', '--name', 'test-import',
+            '--fullname', 'Test Import User',
+            '--email', 'test@import.com',
+            '--ssh-key', '/path/to/existing/key'
+        ])
+
+        assert result.exit_code == 0
+        mock_managers['wizard'].create_profile_quick.assert_called_once_with(
+            'test-import', 'Test Import User', 'test@import.com', '/path/to/existing/key'
+        )
+
+    def test_create_profile_wizard_quick_failure(self, runner, mock_managers):
+        """Test create profile with quick creation failure."""
+        mock_managers['wizard'].create_profile_quick.side_effect = Exception("Key import failed")
+
+        result = runner.invoke(app, [
+            'create', '--name', 'test-fail',
+            '--fullname', 'Test Fail User',
+            '--email', 'test@fail.com',
+            '--ssh-key', '/path/to/bad/key'
+        ])
+
+        assert result.exit_code == 1
+        assert "Error creating profile" in result.stdout
+
+    def test_delete_profile_no_confirmation(self, runner, mock_managers):
+        """Test delete profile when user cancels confirmation."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "test-profile": {"name": "Test User", "email": "test@example.com"}
+        }
+
+        with patch('typer.confirm', return_value=False):
+            result = runner.invoke(app, ['delete', 'test-profile'])
+
+        assert result.exit_code == 0
+        assert "Deletion cancelled" in result.stdout
+
+    def test_regenerate_key_no_confirmation(self, runner, mock_managers):
+        """Test regenerate key when user cancels confirmation."""
+        mock_managers['profile'].list_profiles.return_value = {
+            "test-profile": {"name": "Test User", "email": "test@example.com"}
+        }
+        mock_managers['profile'].get_profile.return_value = {
+            "name": "Test User", "email": "test@example.com"
+        }
+
+        with patch('typer.confirm', return_value=False):
+            result = runner.invoke(app, ['regenerate-key', 'test-profile'])
+
+        assert result.exit_code == 0
+        assert "Key regeneration cancelled" in result.stdout
