@@ -7,6 +7,16 @@
 
 **Professional CLI for managing multiple GitHub identities with automated SSH key management and seamless profile switching**
 
+## 🎉 What's New in v0.2.0
+
+- **🔒 Passphrase-Protected SSH Keys** - Generate encrypted keys for enhanced security
+- **🔍 SSH Key Fingerprinting** - SHA256 fingerprints for unique identification  
+- **🔌 SSH Agent Integration** - Intelligent detection and management
+- **🛡️ Advanced Connection Testing** - Comprehensive diagnostics with recovery guidance
+- **📊 Enhanced Detection Command** - Rich SSH environment analysis
+- **🔧 Non-Destructive Operations** - Preserve existing SSH setups
+- **📈 Profile Metadata Tracking** - Enhanced storage with security status
+
 ## ✨ Key Features
 
 - 🔐 **Advanced SSH Management** - Generate, import, fingerprint, and manage SSH keys with passphrase support
@@ -14,8 +24,8 @@
 - 🎯 **Interactive Commands** - Smart wizards with case-insensitive profile matching and rich feedback
 - 🔍 **Intelligent SSH Detection** - Auto-detect existing setup with deduplication and ssh-agent integration  
 - 🛡️ **Enterprise Security** - Passphrase-protected keys, ssh-agent integration, comprehensive connection testing
-- 🌐 **Cross-Platform** - Full support for macOS, Linux, and Windows with optimal performance
-- 🏢 **Production-Ready** - 260+ tests, 80%+ coverage, type-safe, professionally maintained
+- 🌐 **Cross-Platform** - Enhanced support for macOS, Linux, and Windows with improved configuration handling
+- 🏢 **Production-Ready** - 320+ tests, 89%+ coverage, type-safe, professionally maintained
 
 ## 📦 Installation
 
@@ -114,6 +124,35 @@ ghsw test            # Test GitHub connection
 ghsw regenerate-key  # Generate new SSH key
 ```
 
+## 🔒 Enhanced Security Features (v0.2.0)
+
+**Passphrase-Protected SSH Keys**: Generate and manage encrypted SSH keys for enhanced security:
+```bash
+ghsw regenerate-key work
+# 🔐 Generate passphrase-protected key? [Y/n]: Y
+# 🔑 Enter passphrase for new SSH key: ••••••••
+# ✅ New encrypted SSH key generated!
+```
+
+**SSH Key Fingerprinting**: Every key gets a unique SHA256 fingerprint for identification:
+```bash
+ghsw list
+# 📋 GitHub Profiles:
+#   🟢 work - john@company.com (Active)
+#       🔐 SSH: Protected • SHA256:abc123def456... • Ed25519
+#   ⚪ personal - john@gmail.com 
+#       🔓 SSH: Unprotected • SHA256:def456abc123... • Ed25519
+```
+
+**SSH Agent Integration**: Intelligent detection and management of loaded keys:
+```bash
+ghsw detect
+# 🔌 SSH Agent Status:
+#   ✅ ssh-agent running (PID: 12345)
+#   🔑 2/4 keys loaded in agent
+#   🔐 1 passphrase-protected key requires unlock
+```
+
 ## 🔍 Advanced SSH Intelligence
 
 GitHub Switcher provides enterprise-grade SSH key management with comprehensive analysis:
@@ -135,13 +174,14 @@ ghsw detect
 # 🌐 GitHub Connectivity: ✅ All connections optimal
 ```
 
-**Enterprise SSH Features:**
-- **Key Fingerprinting** - SHA256 fingerprints for unique identification and deduplication
-- **Passphrase Protection** - Generate and detect encrypted SSH keys for enhanced security
-- **SSH Agent Integration** - Intelligent detection and management of ssh-agent loaded keys
-- **Advanced Connection Testing** - Comprehensive diagnostics with specific error guidance
-- **Non-Destructive Operations** - Copy (don't move) existing keys, preserve original setup
-- **Profile Metadata Tracking** - Enhanced profile storage with SSH key attributes and usage history
+**Enterprise SSH Features (v0.2.0):**
+- **🔐 Passphrase Protection** - Generate and detect encrypted SSH keys for enhanced security
+- **🔍 Key Fingerprinting** - SHA256 fingerprints for unique identification and deduplication  
+- **🔌 SSH Agent Integration** - Intelligent detection and management of ssh-agent loaded keys
+- **🛡️ Advanced Connection Testing** - Comprehensive diagnostics with specific error guidance and recovery suggestions
+- **🔧 Non-Destructive Operations** - Copy (don't move) existing keys, preserve original setup
+- **📈 Profile Metadata Tracking** - Enhanced profile storage with SSH key attributes and usage history
+- **🛠️ Enhanced Detection Command** - Rich SSH environment analysis with security insights and key metadata
 
 ## 📋 Command Reference
 
@@ -154,13 +194,13 @@ ghsw detect
 | `ghsw delete [profile]` | Remove profile and clean up SSH keys |
 | `ghsw copy-key [profile]` | Copy SSH public key to clipboard |
 | `ghsw test [profile]` | Test SSH connection to GitHub |
-| `ghsw regenerate-key [profile]` | Generate new SSH key with optional passphrase protection |
+| `ghsw regenerate-key [profile]` | Generate new SSH key with passphrase protection (v0.2.0) |
 | `ghsw detect` | Comprehensive SSH environment analysis with security insights |
 
 ## 🏢 Enterprise Features
 
-- **Advanced Security** - Passphrase-protected keys, fingerprinting, ssh-agent integration, secure defaults
-- **Comprehensive Testing** - 260+ tests with 80%+ coverage ensuring reliability across all platforms  
+- **🔒 Advanced Security (v0.2.0)** - Passphrase-protected keys, SHA256 fingerprinting, ssh-agent integration, secure defaults
+- **Comprehensive Testing** - 320+ tests with 89%+ coverage ensuring reliability across all platforms  
 - **Intelligent Error Handling** - Robust error recovery with specific guidance for SSH issues
 - **Cross-Platform Excellence** - Automated testing on macOS, Linux, and Windows with platform optimizations
 - **Type Safety** - Full type hints and static analysis validation with mypy
@@ -209,11 +249,11 @@ ghsw switch client-b  # Switch to Client B work
 
 ## 📊 Quality Metrics
 
-- **Test Coverage** - Enterprise-grade test suite with 260+ tests and 80%+ coverage
+- **Test Coverage** - Enterprise-grade test suite with 320+ tests and 89%+ coverage
 - **Cross-Platform** - Automated CI testing on macOS, Linux, Windows with performance optimization
 - **Type Safety** - Full mypy validation with strict settings and comprehensive type coverage
 - **Code Quality** - Linted with ruff, formatted consistently, maintained to professional standards
-- **Security** - Passphrase-protected Ed25519 keys, ssh-agent integration, fingerprinting, proper permissions
+- **Security (v0.2.0)** - Passphrase-protected Ed25519 keys, SHA256 fingerprinting, ssh-agent integration, proper permissions
 
 ## 🌟 Support the Project
 
